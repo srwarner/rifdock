@@ -528,6 +528,7 @@ int main(int argc, char *argv[]) {
 	print_header( "preparing target" );
 	core::pose::PoseOP target = make_shared<core::pose::Pose>();
 	core::import_pose::pose_from_file( *target, target_fname );
+	//target->dump_pdb("test.pdb");
 	std::cout << "target nres: " << target->size() << std::endl;
 	std::string target_tag = utility::file::file_basename( utility::file_basename( target_fname ) );
 

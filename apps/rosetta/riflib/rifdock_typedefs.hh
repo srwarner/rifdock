@@ -19,6 +19,7 @@
 #include <scheme/actor/BackboneSasaActor.hh>
 #include <scheme/actor/VoxelActor.hh>
 #include <scheme/actor/Atom.hh>
+#include <scheme/actor/PMActor.hh>
 #include <scheme/kinematics/Scene.hh>
 #include <scheme/scaffold/ScaffoldProviderBase.hh>
 #include <scheme/nest/NEST.hh>
@@ -31,6 +32,9 @@
 #include <boost/mpl/vector.hpp>
 
 #include <unordered_map>
+
+#include <core/scoring/motif/motif_hash_stuff.hh>
+#include <numeric/xyzTransform.io.hh>
 
 namespace devel {
 namespace scheme {
@@ -56,6 +60,10 @@ typedef ::scheme::actor::VoxelActor<EigenXform,float> VoxelActor;
 typedef ::scheme::actor::SimpleAtom< Eigen::Vector3f > SimpleAtom;
 typedef ::scheme::chemical::HBondRay HBondRay;
 
+typedef ::scheme::actor::PMActor<::Eigen::Transform<float,3,Eigen::AffineCompact>> PMActor;
+
+
+
 // This is used to allow SASA to be calculated like an energy but not contribute to the total
 static float const SASA_SUBVERT_MULTIPLIER = 1.0e-9; 
 
@@ -73,6 +81,7 @@ typedef boost::mpl::vector<
             VoxelActor,
             BBHBondActor,
             BBSasaActor,
+            PMActor,
             RIFAnchor
         > ParametricSceneContainers;
 

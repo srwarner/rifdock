@@ -49,6 +49,8 @@
 #include <core/import_pose/import_pose.hh>
 #include <utility/file/file_sys_util.hh>
 
+#include <core/pose/motif/reference_frames.hh>
+
 
 
 namespace devel {
@@ -84,6 +86,9 @@ get_info_for_iscaff(
         ::scheme::numeric::rand_xform(rng,scaffold_perturb);
         xform_pose( scaffold, eigen2xyz(scaffold_perturb) );
     }
+    // if (opt.align_scaffold_to_pos) {
+        
+    // }
 
 
     scaffold_res.clear();
@@ -372,6 +377,10 @@ make_conformation_from_data_cache(ScaffoldDataCacheOP cache, bool fa /*= false*/
 
         // todo map res indices, must also edit onebody_energies
         BBActor bbactor( N, CA, C, '-', '-', scaffres_g2l[ir-1] );
+        numeric::xyzTransform<core::Real> x_scaffo = core::pose::motif::get_backbone_reference_frame(scaffold_centered,ir);
+        char ss = scaffold_centered.secstruct(ir);
+        devel::scheme::PMActor bbPM(devel::scheme::xyz2eigen(x_scaffo).template cast<float>(),'-',ss);
+        scene.add_actor(0, bbPM);
         runtime_assert( bbactor.index_ == scaffres_g2l[ir-1] );
 
 

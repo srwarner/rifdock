@@ -32,6 +32,9 @@
 
 #include <parallel/algorithm>
 
+#include <core/scoring/motif/motif_hash_stuff.hh>
+
+
 namespace scheme { namespace search { struct HackPackOpts; }}
 
 namespace devel {
@@ -134,6 +137,8 @@ struct RifSceneObjectiveConfig
     float sasa_threshold;
     float sasa_multiplier;
     float ignore_rifres_if_worse_than;
+    core::scoring::motif::MotifHashManager *mman;
+    bool use_PM;
 
 };
 

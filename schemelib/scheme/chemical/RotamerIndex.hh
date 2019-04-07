@@ -291,6 +291,7 @@ RotamerIndexSpec
 		for(auto rot_spec : rot_specs){
 			//std::cout << rot_spec.resname_ << std::endl;
 			if (rot_index.d_l_map_.find(rot_spec.resname_) == rot_index.d_l_map_.end()) {
+				std::cout << rot_spec.resname_ << " " << rot_spec.chi_ << " " << rot_spec.n_proton_chi_ << " " << rot_spec.parent_key_<< std::endl;
 				rot_index.add_rotamer(rot_spec.resname_,rot_spec.chi_,rot_spec.n_proton_chi_,rot_spec.parent_key_);
 			} else {
 				rot_index.add_rotamer(rot_spec.resname_,rot_spec.chi_,rot_spec.n_proton_chi_,rot_spec.parent_key_, true);
@@ -551,6 +552,7 @@ struct RotamerIndex {
 		bool is_d_aa = false
 	){
 		ALWAYS_ASSERT_MSG( n_primary_rotamers_!=0 || parent_key == -1, "must add primary rotamers before children" )
+		std::cout << seen_child_rotamer_ << " " << parent_key << std::endl; 
 		ALWAYS_ASSERT_MSG( !seen_child_rotamer_ || parent_key != -1, "can't intsert primary rotamer after inserting child" )
 		ALWAYS_ASSERT( parent_key == -1 | parent_key < n_primary_rotamers_ );
 		Rotamer r;

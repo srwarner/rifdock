@@ -127,6 +127,9 @@ namespace rif {
             for ( auto const & x : hotspot_reqs ) {
                 hotspot_requirement_labels[ x.hotspot_num ] = x.req_num;
             }
+            // for (auto i: hotspot_requirement_labels) {
+            // 	std::cout << " print reqs: " << i << " " << std::endl;
+            // }
         }
 
 
@@ -233,6 +236,8 @@ namespace rif {
         accumulator->checkpoint( std::cout, false );
 
 		print_header("Building RIF from resampled user hotspots");
+		// tallying hotspot stats
+		std::map<std::tuple<int,int,std::string>, hotspot_stats> hstats;
 		for( int i_hotspot_group = 0; i_hotspot_group < this->opts.hotspot_files.size(); ++i_hotspot_group ){
 
 
@@ -248,13 +253,19 @@ namespace rif {
 
 			utility::vector1<std::vector<std::string>>myresname(pose.size());
 			utility::vector1<std::vector<std::string>>d_name(pose.size());
-			for (int i = 1; i <= pose.size(); i++) {
+			utility::vector1<bool> ftmap_(2,false); // only support BNZ and PHN from ftmap
+			int original_pose_size = pose.size();
+			for (int i = 1; i <= original_pose_size; ++i) {
                 std::string rn(pose.residue(i).name3());
-                if (rn == "CA_") { // carboxamide
-                    myresname[i].push_back("GLN");
-                    myresname[i].push_back("ASN");
-                    d_name[i].push_back(static_cast<std::string>("DUMMY"));
-                    d_name[i].push_back(static_cast<std::string>("DUMMY"));
+                // only use for ftmap stuff
+                core::pose::PoseOP tmp = pose.clone();
+                core::conformation::ResidueOP res = tmp -> residue(1).clone();
+
+				if (rn == "CA_") { // carboxamide
+					myresname[i].push_back("GLN");
+					myresname[i].push_back("ASN");
+					d_name[i].push_back(static_cast<std::string>("DUMMY"));
+					d_name[i].push_back(static_cast<std::string>("DUMMY"));
                 } else if (rn == "OH_") { // hydroxyl
                     myresname[i].push_back("TYR");
                     myresname[i].push_back("SER");
@@ -280,10 +291,27 @@ namespace rif {
                     myresname[i].push_back("ASP");
                     d_name[i].push_back(static_cast<std::string>("DUMMY"));
                     d_name[i].push_back(static_cast<std::string>("DUMMY"));
-                } else {
+                } else if (rn == "BNZ") {
+                	//need to overlap 6 different PHE alignement
+                	myresname.resize(6);
+                	d_name.resize(6);
+                	pose.append_residue_by_jump(*res,i);
+                	myresname[i].push_back("PHE");
+                	d_name[i].push_back(static_cast<std::string>("DUMMY"));
+                	for (int j=1; j < 6; j++){
+                		pose.append_residue_by_jump(*res,i+j);
+                		myresname[i+j].push_back("PHE");
+                		d_name[i+j].push_back(static_cast<std::string>("DUMMY"));
+                	}
+                	ftmap_[1] = true;       	
+                } else if (rn == "PHN") {
+                	myresname[i].push_back("TYR");
+                	d_name[i].push_back(static_cast<std::string>("DUMMY"));
+                	ftmap_[2] = true;
+            	} else {
 					myresname[i].push_back(pose.residue(i).name3());
 					d_name[i].push_back(static_cast<std::string>("DUMMY"));
-					// put in d res name if user specified
+					std::cout << "adding first" << pose.residue(i).name3() << std::endl;
 					if (this->opts.use_d_aa) {
 						for (auto it : params -> rot_index_p -> d_l_map_){
 							if (it.second == rn){
@@ -291,6 +319,12 @@ namespace rif {
 							}
 						}
 					}
+				}
+			}
+			for (int num_res = 1; num_res <= myresname.size(); num_res++) {
+				for (int res = 0; res < myresname[num_res].size(); res++) {
+					std::cout << "Adding: " << i_hotspot_group << " : " << num_res << " : " << myresname[num_res][res] << std::endl;
+					hstats.insert(std::pair<std::tuple<int, int, std::string>,hotspot_stats>(std::make_tuple(i_hotspot_group, num_res, myresname[num_res][res]),hotspot_stats(i_hotspot_group, num_res, myresname[num_res][res])));
 				}
 			}
 
@@ -323,45 +357,93 @@ namespace rif {
             	// }
 
 				std::cout << i_hspot_res << " " << std::flush; // No endl here!!!!
-
 				// possible name still OK
 				int input_nheavy = pose.residue(i_hspot_res).nheavyatoms();
                 if (input_nheavy < 3) { // this can happen for disembodied hydroxyls
                     input_nheavy = 3;
                 }
-
-
-
-				EigenXform Xref = ::scheme::chemical::make_stub<EigenXform>(
+                EigenXform Xref;
+                Pos hot_cen;
+               	//these are the hotspot atoms				
+				Pos hot_atom1; Pos hot_atom2; Pos hot_atom3;
+                if (ftmap_[2]) {
+                	// last three stub into Xform for transform calculation
+                	Xref = ::scheme::chemical::make_stub<EigenXform>(
+		            pose.residue(i_hspot_res).atom("C5").xyz() - xyz_tgt_cen,
+		            pose.residue(i_hspot_res).atom("C6").xyz() - xyz_tgt_cen,
+		            pose.residue(i_hspot_res).atom("O1").xyz() - xyz_tgt_cen
+		        	);
+                	// loop to get xyz of last three atom
+					for (int i = 0; i < 3; ++ i) {
+						hot_atom1(i,0) = pose.residue(i_hspot_res).atom("C5").xyz()[i];
+						hot_atom2(i,0) = pose.residue(i_hspot_res).atom("C6").xyz()[i];
+						hot_atom3(i,0) = pose.residue(i_hspot_res).atom("O1").xyz()[i];
+					}
+                } 
+                if (ftmap_[1]) {
+                	if (i_hspot_res > 1 && i_hspot_res < 6) {
+                		Xref = ::scheme::chemical::make_stub<EigenXform>(
+		            	pose.residue(i_hspot_res).xyz(i_hspot_res - 1) - xyz_tgt_cen,
+		            	pose.residue(i_hspot_res).xyz(i_hspot_res + 1) - xyz_tgt_cen,
+		            	pose.residue(i_hspot_res).xyz(i_hspot_res	 ) - xyz_tgt_cen
+		        		);
+						// loop to get xyz of last three atom
+						for (int i = 0; i < 3; ++ i) {
+							hot_atom1(i,0) = pose.residue(i_hspot_res).xyz(i_hspot_res - 1)[i];
+							hot_atom2(i,0) = pose.residue(i_hspot_res).xyz(i_hspot_res + 1)[i];
+							hot_atom3(i,0) = pose.residue(i_hspot_res).xyz(i_hspot_res    )[i];
+						}
+                	} else if (i_hspot_res == 1) {
+                		Xref = ::scheme::chemical::make_stub<EigenXform>(
+		            	pose.residue(i_hspot_res).xyz(6) - xyz_tgt_cen,
+		            	pose.residue(i_hspot_res).xyz(i_hspot_res + 1) - xyz_tgt_cen,
+		            	pose.residue(i_hspot_res).xyz(i_hspot_res) - xyz_tgt_cen
+		        		);
+						// loop to get xyz of last three atom
+						for (int i = 0; i < 3; ++ i) {
+							hot_atom1(i,0) = pose.residue(i_hspot_res).xyz(6)[i];
+							hot_atom2(i,0) = pose.residue(i_hspot_res).xyz(i_hspot_res + 1)[i];
+							hot_atom3(i,0) = pose.residue(i_hspot_res).xyz(i_hspot_res)[i];
+						}
+                	} else if (i_hspot_res == 6) {
+                		Xref = ::scheme::chemical::make_stub<EigenXform>(
+		            	pose.residue(i_hspot_res).xyz(i_hspot_res - 1) - xyz_tgt_cen,
+		            	pose.residue(i_hspot_res).xyz(1) - xyz_tgt_cen,
+		            	pose.residue(i_hspot_res).xyz(i_hspot_res) - xyz_tgt_cen
+		        		);
+						// loop to get xyz of last three atom
+						for (int i = 0; i < 3; ++ i) {
+							hot_atom1(i,0) = pose.residue(i_hspot_res).xyz(i_hspot_res - 1)[i];
+							hot_atom2(i,0) = pose.residue(i_hspot_res).xyz(1)[i];
+							hot_atom3(i,0) = pose.residue(i_hspot_res).xyz(i_hspot_res)[i];
+						}
+                	}
+            	} 
+            	if ( !ftmap_[1] && !ftmap_[2]){
+                	Xref = ::scheme::chemical::make_stub<EigenXform>(
 		            pose.residue(i_hspot_res).xyz( input_nheavy - 2 ) - xyz_tgt_cen,
 		            pose.residue(i_hspot_res).xyz( input_nheavy - 1 ) - xyz_tgt_cen,
 		            pose.residue(i_hspot_res).xyz( input_nheavy - 0 ) - xyz_tgt_cen
-		        );
-
-				//get last atom in hotspot residue and iterate over last 3
-      			core::conformation::Atoms::const_iterator iter = pose.residue(i_hspot_res).heavyAtoms_end();
-				core::conformation::Atoms::const_iterator end = iter-3;
-
-				//these are the hotspot atoms
-				Pos hot_atom1; Pos hot_atom2; Pos hot_atom3;
-
-				//iterate and save xyz into hotspot
-				while(iter >= end){
-        			if (iter == end +2){hot_atom1(0,0) = iter->xyz()[0];hot_atom1(1,0) = iter->xyz()[1];hot_atom1(2,0) = iter->xyz()[2];}
-        			if (iter == end +1){hot_atom2(0,0) = iter->xyz()[0];hot_atom2(1,0) = iter->xyz()[1];hot_atom2(2,0) = iter->xyz()[2];}
-        			if (iter == end +0){hot_atom3(0,0) = iter->xyz()[0];hot_atom3(1,0) = iter->xyz()[1];hot_atom3(2,0) = iter->xyz()[2];}
-        			iter --;
-      			}
-      			//std::cout << "crash again" << std::endl;
-      			hot_atom1 = hot_atom1 - target_vec;
-				hot_atom2 = hot_atom2 - target_vec;
-				hot_atom3 = hot_atom3 - target_vec;
+		        	);
+		        	//get last atom in hotspot residue and iterate over last 3 
+      				core::conformation::Atoms::const_iterator iter = pose.residue(i_hspot_res).heavyAtoms_end();
+					core::conformation::Atoms::const_iterator end = iter-3;
+					while(iter >= end){
+        				if (iter == end +2){hot_atom1(0,0) = iter->xyz()[0];hot_atom1(1,0) = iter->xyz()[1];hot_atom1(2,0) = iter->xyz()[2];}
+        				if (iter == end +1){hot_atom2(0,0) = iter->xyz()[0];hot_atom2(1,0) = iter->xyz()[1];hot_atom2(2,0) = iter->xyz()[2];}
+        				if (iter == end +0){hot_atom3(0,0) = iter->xyz()[0];hot_atom3(1,0) = iter->xyz()[1];hot_atom3(2,0) = iter->xyz()[2];}
+        				iter --;
+      				}
+                }
+      			// move with the target
+      			hot_atom1 = hot_atom1 - target_vec; 
+				hot_atom2 = hot_atom2 - target_vec; 
+				hot_atom3 = hot_atom3 - target_vec;	
 				//calculate centroid of hot_spot res and translate with target
-				Pos hot_cen = (hot_atom1 + hot_atom2 + hot_atom3)/3;
-
-
+				hot_cen = (hot_atom1 + hot_atom2 + hot_atom3)/3;
 				// for each irot that is the right restype (can be had from rot_intex_p)
 				int irot_begin = 0, irot_end = params -> rot_index_p -> size();
+				std::cout << irot_begin << "   " << irot_end << std::endl; 
 				for( int irot = irot_begin; irot < irot_end; ++irot ){
 					::Eigen::Matrix<float,3,3> rif_res; // this is the rif residue last three atoms matrix
 
@@ -370,10 +452,8 @@ namespace rif {
 
 					//for (auto const & it: myresname[i_hspot_res]){
 					for (int i = 0; i < myresname[i_hspot_res].size(); i++) {
-							auto it = myresname[i_hspot_res][i];
-							auto d_it =  d_name[i_hspot_res][i];
-							std::cout << it << std::endl;
-							std::cout << d_it << std::endl;
+						auto it = myresname[i_hspot_res][i];
+						auto d_it =  d_name[i_hspot_res][i];
 						if (params -> rot_index_p -> resname(irot) == it || params -> rot_index_p -> resname(irot) == d_it)
 						{
 							std::vector<SchemeAtom> const & rotamer_atoms( params->rot_index_p->atoms(irot) );
@@ -397,7 +477,6 @@ namespace rif {
                                 );
                             }
 
-							//std::cout << params -> rot_index_p -> resname(irot) << " : " << irot << std::endl;
 							EigenXform impose; //transform for mapping the Rot to Rif
 							::Eigen::Matrix<float,3,3> rif_res; // this is the rif residue last three atoms
 							int latoms = params -> rot_index_p -> natoms(irot);
@@ -425,8 +504,8 @@ namespace rif {
 
 								passes = 2;
 
-							} else if (pose.residue(i_hspot_res).name3() == "PHE" || d_it == "DPH") {
-
+							} else if (pose.residue(i_hspot_res).name3() == "PHE" ||  d_it == "DPH" ) {
+								
 								Pos atom6;
 								atom6(0,0) = pose.residue(i_hspot_res).xyz( input_nheavy - 5 )[0];
 								atom6(1,0) = pose.residue(i_hspot_res).xyz( input_nheavy - 5 )[1];
@@ -446,12 +525,9 @@ namespace rif {
 
 
 							for ( int pass = 0; pass < passes; pass++) {
-								//std::cout << Tran_mtx.block<3,3>(0,0)*rif_res+temp << std::endl;
-								//for( auto const & x_perturb : sample_position_deltas ){
 								int num_of_hotspot_inserted = 0;
-								//std::cout << "being parallel block" << std::endl;
 
-                                if ( single_thread ) {
+                                if ( single_thread ) { //single_thread
                                     omp_set_num_threads(1);
                                 }
 
@@ -495,13 +571,24 @@ namespace rif {
 										//accumulator->insert( x_position, positioned_rotamer_score-100, irot, i_hotspot_group, -1 );
 
 
-											//std::cout << "new :                  " << std::endl;
 										auto atom_N = x_position * rotamer_atoms[0].position();
 										auto atom_CA = x_position * rotamer_atoms[1].position();
 										auto atom_C = x_position * rotamer_atoms[2].position();
 
 										BBActor bbact( atom_N, atom_CA, atom_C);
 										EigenXform new_x_position = bbact.position();
+
+										#pragma omp critical
+										{
+											std::map<std::tuple<int,int,std::string>, hotspot_stats>::iterator it;
+											//it = hstats.find(std::make_tuple(0,1,std::string("PHE")));
+											//std::cout << "try to find this: " << i_hotspot_group << " " << i_hspot_res << " " << params -> rot_index_p -> resname(irot) << std::endl;
+											it = hstats.find(std::make_tuple(i_hotspot_group, i_hspot_res, params -> rot_index_p -> resname(irot)));
+											if (it != hstats.end()) {
+												it -> second.scores.push_back(positioned_rotamer_score);
+												it -> second.bb_pos.push_back(new_x_position);
+											}
+										}
 
                                         int sat1 = this -> opts.single_file_hotspots_insertion ? i_hspot_res : i_hotspot_group;
                                         int sat2 =-1;
@@ -511,8 +598,6 @@ namespace rif {
                                         }
 
                                         if ( opts.test_hotspot_redundancy ) {
-
-                                            // accumulator->condense();
 
                                             std::set<size_t> in_rif = accumulator->get_sats_of_this_irot( new_x_position, irot );
 
@@ -538,9 +623,9 @@ namespace rif {
 										if ( opts.label_hotspots_254 ) {
 											sat1 = 254;
 										}
-
-                                        accumulator->insert( new_x_position, positioned_rotamer_score + opts.hotspot_score_bonus, irot, sat1, sat2, force_hotspot, single_thread);
-
+										//std::cout << "inserting: " << sat1 << std::flush;
+                                        //accumulator->insert( new_x_position, positioned_rotamer_score + opts.hotspot_score_bonus, irot, sat1, sat2, force_hotspot, single_thread);
+                                        accumulator->insert( new_x_position, positioned_rotamer_score - 10, irot, sat1, sat2, force_hotspot, single_thread);
 
 
 									 	if (opts.dump_hotspot_samples>=NSAMP){
@@ -573,10 +658,98 @@ namespace rif {
 
 		std::cout << std::endl; // This ends the "progress bar"
 
-		if (opts.dump_hotspot_samples>=NSAMP){
-			hotspot_dump_file.close();
+		// if (opts.dump_hotspot_samples>=NSAMP){
+		// 	hotspot_dump_file.close();
+		// }
+		if (true) {
+			//std::ofstream hotspot_sc, rif_sc, seed_pos;
+			std::ofstream seed_pos;
+  			// hotspot_sc.open ("hotspot_score.sc");
+  			// rif_sc.open("rif_score.sc");
+  			seed_pos.open("seeding_list");
+  			auto rif_ptr = accumulator->rif();
+			for (std::map<std::tuple<int,int,std::string>, hotspot_stats>::iterator it = hstats.begin(); it!=hstats.end(); ++it) {
+				//scorefile << std::get<0>(it -> first) <<  " "  << std::get<1>(it -> first) << " " << std::get<2>(it -> first) << std::endl;
+				//float insert_avg = std::accumulate( it -> second.scores.begin(), it -> second.scores.end(), 0.0) / it -> second.scores.size();
+				//std::cout << "avg score: " << insert_avg << std::endl; 
+				// for (auto score : it -> second.scores) {
+				// 	hotspot_sc << score << " ";
+					
+				// }
+				std::vector<std::string> bin_centers;
+				for (auto trans : it -> second.bb_pos) {
+					// std::cout << trans.linear().row(0) << std::endl;
+					// std::cout << trans.linear().row(1) << std::endl;
+					// std::cout << trans.linear().row(2) << std::endl;
+					// std::cout << trans.translation() << std::endl;
+					// std::cout << "end insert trans" << std::endl;
+					//seed_pos << trans.linear().row(0) << " " << trans.linear().row(1) << " " << trans.linear().row(2) << " " << trans.translation() << std::endl;
+					uint64_t const key = rif_ptr -> get_bin_key( trans );
+					EigenXform bin_cen = rif_ptr -> get_bin_center(key);
+					// std::string test_string;
+					// test_string << bin_cen.linear().row(0) << ' ' << bin_cen.linear().row(1);
+					// for (int a = 0; a < 3; ++a) {
+					// 	test_string += static_cast<float>(bin_cen(a,0));
+					// 	// test_string += " ";
+					// 	// test_string += bin_cen(a,1);
+					// 	// test_string += " ";
+					// 	// test_string += bin_cen(a,2);
+					// 	// test_string += " ";
+					// }
+					// std::cout << test_string << std::endl;
+					// for (int a = 0; a < 3; ++a) {
+					// 	test_string += bin_cen(a,4);
+					// 	test_string += " ";
+					// }
+					//std::cout << test_string << std::endl;	
+					// if (std::find(bin_centers.begin(), bin_centers.end(), test_string) == bin_centers.end()) {
+					// 	bin_centers.push_back(test_string);
+
+					// } 
+					// for (auto bin : bin_centers) {
+					// 	bool eq = bin_cen.isApprox(bin,10);
+					// 	if (eq) {
+					// 		bin_centers.push_back(bin_cen);
+					// 	} else if (!eq) {
+					// 		continue;
+					// 	}
+					// }
+
+
+					//std::vector<std::pair<EigenXform,float>> get_rif_hot = accumulator->get_scores_of_this_irot_bbpos( it, params -> rot_index_p -> index_bounds(std::get<2>(it -> first)) );
+					// for (auto j : get_rif_hot -> first) {
+					// std::cout << bin_cen.linear().row(0) << std::endl;
+					// std::cout << bin_cen.linear().row(1) << std::endl;
+					// std::cout << bin_cen.linear().row(2) << std::endl;
+					// std::cout << bin_cen.translation() << std::endl;
+					// std::cout << "end center trans" << std::endl;
+
+					seed_pos << bin_cen.linear().row(0) << ' ' << bin_cen.linear().row(1) <<  ' ' << bin_cen.linear().row(2) << ' ' << bin_cen.translation()[0] << ' ' <<bin_cen.translation()[1] << ' ' << bin_cen.translation()[2] << std::endl;
+					// }
+				}
+				// std::cout << "total size of bins: " << bin_centers.size() << std::endl;
+				// hotspot_sc << std::endl;
+				// std::cout << params -> rot_index_p -> index_bounds(std::get<2>(it -> first)).first << ":" <<  params -> rot_index_p -> index_bounds(std::get<2>(it -> first)).second << std::endl;
+				// //scorefile << "existing rif:  " << std::endl;
+				// for (auto bb : it -> second.bb_pos) {
+				// 	std::vector<std::pair<EigenXform,float>> get_rif = accumulator->get_scores_of_this_irot_bbpos( bb, params -> rot_index_p -> index_bounds(std::get<2>(it -> first)) );
+					
+				// 	if (!get_rif.empty()) {
+				// 		//scorefile << "existing rif:  " << std::endl;
+				// 		for (auto rif_score : get_rif) {
+				// 			rif_sc << rif_score.second << " ";
+				// 			//std::cout << rif_score.first.linear().row(0) << std::endl;
+				// 		}
+				// 		rif_sc << std::endl;
+				// 		//float rif_avg = std::accumulate( get_rif.begin(), get_rif.end(), 0.0) / get_rif.size();
+				// 		//std::cout << "avg rif score: " << rif_avg << std::endl; 
+				// 	}
+				// }
+			}
+			// hotspot_sc.close();
+			// rif_sc.close();
+			seed_pos.close(); 
 		}
-		//utility_exit_with_message("done");
 		// let the rif builder thing know you're done
 		accumulator->checkpoint( std::cout, force_hotspot );
 
@@ -596,7 +769,7 @@ namespace rif {
 		//auto rif_ptr = accumulator->rif();
         // std::cout << "testing rifbase key iteration" << std::endl;
         // int count = 0;
-        // for( auto key : rif_ptr->key_range() ){
+        //for( auto key : rif_ptr->key_range() ){
         //     EigenXform bin_center = rif_ptr->get_bin_center(key);
         //     right... the edges of the bins.... this is only *mostly* true
         //     runtime_assert( rif_ptr->get_bin_key(bin_center) == key );

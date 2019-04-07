@@ -364,7 +364,10 @@ HSearchFinishTask::return_search_points(
 
     size_t good_points = 0;
     for( good_points; good_points < search_points.size(); ++good_points ){
-        if( search_points[good_points].score > 0 ) break;
+        if( search_points[good_points].score > 0 ) { // search_points[good_points].score > 0
+            std::cout << search_points[good_points].score << std::endl;
+            break;
+        }
     }
 
     search_points.resize(good_points);

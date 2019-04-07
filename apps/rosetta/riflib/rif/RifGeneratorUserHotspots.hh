@@ -21,6 +21,7 @@ namespace devel {
 namespace scheme {
 namespace rif {
 
+
 struct RifGeneratorUserHotspotsOpts {
 	float hotspot_sample_cart_bound = 1.0;
 	float hotspot_sample_angle_bound = 30.0;
@@ -57,6 +58,16 @@ struct RifGeneratorUserHotspots : public RifGenerator {
 		::scheme::chemical::RotamerIndexSpec& rot_spec
 	) override;
 
+};
+
+class hotspot_stats {
+	public:
+		hotspot_stats(int group, int res, std::string name) : i_group(group), i_res(res), res_name(name){}
+		int i_group;
+		int i_res;
+		std::string res_name;
+		std::vector<float> scores;
+		std::vector<EigenXform> bb_pos;
 };
 
 

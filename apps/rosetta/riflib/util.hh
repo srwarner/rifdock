@@ -136,6 +136,16 @@ xyz2eigen( numeric::xyzMatrix<Float> const & m ){
 	}
 	return rot;
 }
+template< class Float >
+Eigen::Transform<Float,3,Eigen::AffineCompact>
+xyz2eigen( numeric::xyzTransform<Float> const & xin ){
+	Eigen::Transform<Float,3,Eigen::AffineCompact> x( xyz2eigen( xin.R ) );
+	x.translation()[0] = xin.t[0];
+	x.translation()[1] = xin.t[1];
+	x.translation()[2] = xin.t[2];
+	return x;
+}
+
 
 template< class Float >
 numeric::xyzMatrix<Float>

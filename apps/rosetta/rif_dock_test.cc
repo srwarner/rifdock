@@ -94,27 +94,230 @@
 
 	#include <riflib/seeding_util.hh>
 
+	#include <core/scoring/motif/motif_hash_stuff.fwd.hh>
+	#include <core/scoring/motif/motif_hash_stuff.hh>
+	#include <core/scoring/motif/util.hh>
+	#include <core/pose/motif/reference_frames.hh>
+	#include <numeric/xyzTransform.io.hh>
+	#include <basic/options/keys/in.OptionKeys.gen.hh>
+	#include <basic/options/keys/out.OptionKeys.gen.hh>
+	#include <basic/options/keys/mh.OptionKeys.gen.hh>
+	#include <basic/options/option_macros.hh>
+	#include <scheme/actor/BackboneActor.hh>
+
+	#include <riflib/util.hh>
+	#include <scheme/actor/PMActor.hh>
+	#include <riflib/rifdock_typedefs.hh>
+	#include <core/scoring/dssp/Dssp.hh>
+	#include <iostream>
+	#include <fstream>
+	#include <string> 
+
 
 
 
 using ::scheme::make_shared;
 using ::scheme::shared_ptr;
+using basic::options::option;
+namespace mh = basic::options::OptionKeys::mh;
+typedef numeric::geometry::hashing::Real6 Real6;
 
 typedef int32_t intRot;
+static inline float fastlog2(float x) {
+  union {
+    float f;
+    uint32_t i;
+  } vx = {x};
+  union {
+    uint32_t i;
+    float f;
+  } mx = {(vx.i & 0x007FFFFF) | 0x3f000000};
+  float y = vx.i;
+  y *= 1.1920928955078125e-7f;
 
+  return y - 124.22551499f - 1.498030302f * mx.f -
+         1.72587999f / (0.3520887068f + mx.f);
+}
 
+static inline float fastlog(float x) { return 0.69314718f * fastlog2(x); }
+//////////////////////////////////// ScorePMActor ////////////////////////////////////////////
+    
+    struct ScorePMActorResult {
+        float val_;
+        ScorePMActorResult() : val_(0) {}
+        ScorePMActorResult( float f ) : val_(f) {}
+        operator float() const { return val_; }
+        void operator=( float f ) { val_ = f; }
+        void operator+=( float f ) { val_ += f; }
+        bool operator<( ScorePMActorResult const & other ) const { return val_ < other.val_; }
+    };
+    template<class PMActor>
+    struct ScorePMActor {
+        typedef ScorePMActorResult Result;
+        typedef std::pair<PMActor,PMActor> Interaction;
+        
+        core::scoring::motif::MotifHashManager *mman_;
+        ScorePMActor() {};
+        void init(core::scoring::motif::MotifHashManager *mman){
+            mman_ = mman;
+        }        
+        template<class Config>
+        Result operator()( PMActor const & sc, PMActor const & bb, Config const& c ) const {
+            core::scoring::motif::XformScoreCOP xs_sc_bb_fxn1 = mman_ -> get_xform_score_SC_BB(sc.aa_);
+            numeric::xyzTransform<core::Real> pm_key = get_pm_key(sc, bb);
+            float scbb_motif = 0;
+            if ( (xs_sc_bb_fxn1) && (pm_key.t.length_squared() < 100.0)) {
+                scbb_motif = xs_sc_bb_fxn1 -> score_of_bin(pm_key);
+                std::cout << ": get score!! "<<  scbb_motif << std::endl;
+ //         if (tmp1 > 1.0 || !use_log) scbb_motif += use_log ? fastlog(tmp1) : tmp1;
+            }
+            return scbb_motif;
+        }
+        numeric::xyzTransform<core::Real>
+        get_pm_key(PMActor const & sc, PMActor const & bb) const {
+            // numeric::xyzVector<core::Real> sc_Vn, sc_Vca, sc_Vc, bb_Vn, bb_Vca, bb_Vc;
+            // sc.get_n_ca_c_coreReal(sc_Vn, sc_Vca, sc_Vc);
+            // bb.get_n_ca_c_coreReal(bb_Vn, bb_Vca, bb_Vc);
+            // numeric::xyzTransform<core::Real> x_sc = core::pose::motif::get_backbone_reference_frame(sc_Vn, sc_Vca, sc_Vc);
+            // numeric::xyzTransform<core::Real> x_bb = core::pose::motif::get_backbone_reference_frame(bb_Vn, bb_Vca, bb_Vc);
+            auto x = sc.position().inverse() * bb.position();
+            numeric::xyzTransform<core::Real> impose = devel::scheme::eigen2xyz(x.template cast<double>());
+            return impose;
+        }
+
+ //        template<class Config>
+ //        Result operator()( RIFAnchor const & sc, BBActor const & bb, Config const& c ) const {
+ // //            core::scoring::motif::XformScoreCOP xs_sc_bb_fxn1 = mman_ -> get_xform_score_SC_BB(sc_aa);
+ // //            numeric::xyzTransform<core::Real> impose = sc.inverse() * bb;
+ // //            float scbb_motif = 0;
+ // //            if ( (xs_sc_bb_fxn1) && (impose.t.length_squared() < 100.0)) {
+ // //                scbb_motif = xs_sc_bb_fxn1 -> score_of_bin(impose);
+ // //                std::cout << ": get score!! "<<  scbb_motif << std::endl;
+ // // //         if (tmp1 > 1.0 || !use_log) scbb_motif += use_log ? fastlog(tmp1) : tmp1;
+ // //            }
+ //            return 0;
+ //        }
+
+    };
 int main(int argc, char *argv[]) {
-
-
 	register_options();
 	devel::init(argc,argv);
-
 
 	devel::scheme::print_header( "setup global options" );
 	RifDockOpt opt;
 	opt.init_from_cli();
 	utility::file::create_directory_recursive( opt.outdir );
+	
+	if (true) {
+		using ::devel::scheme::RotamerIndex;
 
+		std::cout << "Starting to test motif" << std::endl;
+		//set tmp test motif files
+		//option[basic::options::OptionKeys::mh::path::scores_BB_BB].set_value(static_cast<std::string>("/work/sheffler/data/mh3/xs_bb_aa_resl0.5_sm1_sc0.1_lg/xs_bb_aa_resl0.5_sm1_sc0.1_lg.rpm.bin.gz"));
+		option[basic::options::OptionKeys::mh::path::scores_SC_BB].set_value(static_cast<std::string>("/work/sheffler/data/mh3/xs_scbb_aa1_resl0.6_smooth1.3_msc0.4_mbv1.0/xs_scbb_aa1_resl0.6_smooth1.3_msc0.4_mbv1.0"));
+
+
+		auto mman = core::scoring::motif::MotifHashManager::get_instance();
+		ScorePMActor<devel::scheme::PMActor> scorePM;
+		scorePM.init(mman);
+		core::scoring::motif::MotifHashCOP mhCOP = mman -> get_motif_hash_SC_BB();
+		std::cout << mhCOP << std::endl;
+
+		std::string pose_file = "input/top_fft__0021.pdb";
+		core::pose::Pose mypose = *(core::import_pose::pose_from_file(pose_file));
+		utility::vector1<core::pose::PoseOP> pose_vec = mypose.split_by_chain();
+		// test to get the actual motifs out of the hash 
+		// core::scoring::motif::ResPairMotifQuery rpmq(*pose_vec[2], *pose_vec[1]);
+		// rpmq.useres1().resize(pose_vec[2] -> size(), false);
+		// rpmq.useres1()[103] = true;
+		// core::scoring::motif::MotifHits motifhits;
+		// int count  = mman -> get_matching_motifs(rpmq, motifhits);
+		// std::cout << count << std::endl;
+		// motifhits.dump_motifs_pdb("motif_htis.pdb");
+		// mman -> get_matching_motifs(RPMQ, mh);
+		// numeric::xyzTransform<core::Real> x_target = core::pose::motif::get_sidechain_reference_frame(*pose_vec[2],10);
+		// char aa2 = pose_vec[2] -> residue(10).name1();
+		// std::cout << aa2 << std::endl;
+		// devel::scheme::PMActor pm_target(devel::scheme::xyz2eigen(x_target).template cast<float>(),aa2);
+		//numeric::xyzTransform<core::Real> x_scaffo = core::pose::motif::get_sidechain_reference_frame(*pose_vec[1],10);
+		//char aa1 = pose_vec[1] -> residue(10).name1();
+		//char aa2 = pose_vec[2] -> residue(104).name1();
+		//core::scoring::motif::print_scores_norm(std::cout);
+		//core::scoring::dssp::Dssp dssp( *pose_vec[2] );
+		//dssp.dssp_reduced();
+		//char ss2 = dssp.get_dssp_secstruct( 10 );
+		//core::scoring::motif::XformScoreCOP xs_sc_bb_fxn1 = mman->get_xform_score_SC_BB(aa2);
+		//std::vector<core::Real> target_res = {7, 10, 14, 96, 97, 100, 103, 104};
+		std::vector<core::Real> target_res = {103};
+		Real6 rt6;
+		std::ofstream out("hits.pdb");
+		core::pose::Pose motifs;
+		for (auto it = target_res.begin(); it != target_res.end() ; it++){
+			numeric::xyzTransform<core::Real> x_target = core::pose::motif::get_sidechain_reference_frame(*pose_vec[2],*it);
+			char aa2 = pose_vec[2] -> residue(*it).name1();
+			std::cout << aa2 << std::endl;
+			//core::scoring::motif::XformScoreCOP xs_sc_bb_fxn1 = mman->get_xform_score_SC_BB(aa2);
+			devel::scheme::PMActor pm_target(devel::scheme::xyz2eigen(x_target).template cast<float>(),aa2);
+			core::scoring::motif::XformScoreCOP xs_sc_bb_fxn1 = mman->get_xform_score_SC_BB(aa2);
+			for (auto i = 1; i < pose_vec[1] -> size(); i++){
+				rt6 = core::scoring::motif::get_residue_pair_rt6(*pose_vec[2],*it,*pose_vec[1],i,mhCOP->type());
+				//numeric::Xforms Xform = core::scoring::motif::get_residue_pair_xform(*pose_vec[2],1,*pose_vec[1],1,mhCOP->type());
+				core::scoring::motif::ResPairMotifs rpms;
+				mhCOP -> find_motifs_with_radius(rt6, 1.6,rpms);
+				std::cout << rpms.size() << std::endl;
+				numeric::xyzTransform<core::Real> x_scaffo = core::pose::motif::get_backbone_reference_frame(*pose_vec[1],i);
+				devel::scheme::PMActor pm_scaffo(devel::scheme::xyz2eigen(x_scaffo).template cast<float>());
+				numeric::xyzTransform<core::Real> impose = x_target.inverse() * x_scaffo;
+				float scbb_motif = 0;
+				if ( xs_sc_bb_fxn1 && (impose.t.length_squared() < 100.0)) {
+			  		float tmp1 = xs_sc_bb_fxn1 -> score_of_bin(impose);
+			  		float tmp2 = scorePM(pm_target,pm_scaffo,0);
+			  		//std::cout << i << " vs. " << *it << " : get score!! "<<  tmp1 << " test PM: "<< tmp2 << std::endl;
+					//if (tmp1 > 1.0 || !use_log) scbb_motif += use_log ? fastlog(tmp1) : tmp1;
+		  		}
+		  		if (rpms.size() > 0) {
+			  		for ( core::scoring::motif::ResPairMotifs::const_iterator res = rpms.begin(); res != rpms.end(); ++res ) {
+			  			//res -> dump_pdb("motif_hits.pdb");
+			  			res -> fill_pose_with_motif(motifs);
+			  			
+			  			out<<"MODEL"<<std::endl ;
+						motifs.dump_pdb(out);
+						out<<"ENDMDL"<<std::endl;
+			  		}
+		  		}
+				
+				// if (scbb_motif != 0) {
+				// 	std::cout << i << ": " << scbb_motif << std::endl;
+				// }
+			}
+		}
+
+		//int input_nheavy = pose_vec[2] -> residue(100).nheavyatoms();
+		// ::Eigen::Transform<core::Real,3,Eigen::AffineCompact> aa2_res = ::scheme::chemical::make_stub<::Eigen::Transform<core::Real,3,Eigen::AffineCompact>>(
+		// 	pose_vec[2] -> residue(100).xyz( input_nheavy - 2 ),
+		// 	pose_vec[2] -> residue(100).xyz( input_nheavy - 1 ),
+		// 	pose_vec[2] -> residue(100).xyz( input_nheavy - 0 )
+		// );
+
+		//::scheme::actor::BackboneActor<::Eigen::Transform<core::Real,3,Eigen::AffineCompact>> aa1_res(pose_vec[1] -> residue(10));
+		// numeric::xyzTransform<core::Real> impose = x_target.inverse() * x_scaffo;
+		// //numeric::xyzTransform<core::Real> raa1 = devel::scheme::eigen2xyz(impose);
+
+		// core::scoring::motif::XformScoreCOP xs_sc_bb_fxn1 = mman.get_xform_score_SC_BB(aa2);
+		// std::cout << xs_sc_bb_fxn1 << std::endl;
+		// bool use_log = true;
+		// std::cout << "HERESERES " << std::endl;
+		// float scbb_motif = xs_sc_bb_fxn1 -> score_of_bin(impose);
+		// std::cout << "HUHUHUHUHUHUH " << std::endl;
+
+		// if ( xs_sc_bb_fxn1 && (raa1.t.length_squared() < 100.0)) {
+		//   std::cout << "get score!! "<< std::endl;
+	 //      float tmp1 = (use_log ? 10.0 : 1.0) * xs_sc_bb_fxn1 -> score_of_bin(raa1);
+	 //      if (tmp1 > 1.0 || !use_log) scbb_motif += use_log ? fastlog(tmp1) : tmp1;
+	 //    }
+	    //std::cout << aa1 << " vs. " << aa2 << " = " << scbb_motif << std::endl;
+		utility_exit_with_message("motif_test_done!");
+	}
 
 
 	#ifdef USE_OPENMP
@@ -230,6 +433,7 @@ int main(int argc, char *argv[]) {
 		utility::io::ozstream dokout( opt.dokfile_fname );
 
 
+
 		devel::scheme::RifFactoryConfig rif_factory_config;
 		rif_factory_config.rif_type = rif_type;
 		shared_ptr<RifFactory> rif_factory = ::devel::scheme::create_rif_factory( rif_factory_config );
@@ -281,6 +485,8 @@ int main(int argc, char *argv[]) {
 	core::pose::Pose target;
 	std::vector<SimpleAtom> target_simple_atoms;
 	utility::vector1<core::Size> target_res;
+	utility::vector1<core::Size> target_scPM_res;
+	utility::vector1<core::Size> target_bbPM_res;
 	std::vector<HBondRay> target_donors, target_acceptors;
 	float rif_radius=0.0, target_redundancy_filter_rg=0.0;
 	shared_ptr<BurialManager> burial_manager;
@@ -306,6 +512,14 @@ int main(int argc, char *argv[]) {
 			std::cout << "target_simple_atoms.size() " << target_simple_atoms.size() << std::endl;
 		}
 		target_res = devel::scheme::get_res( opt.target_res_fname , target, /*nocgp*/false );
+		if (opt.target_bbPM_list != "") {
+			target_bbPM_res = devel::scheme::get_res(opt.target_bbPM_list, target, /*nocgp*/false );
+		}
+		if (opt.target_scPM_list != "") {
+			target_scPM_res = devel::scheme::get_res(opt.target_scPM_list, target, /*nocgp*/false );
+		}
+		//target_bbPM_res = devel::scheme::get_res(opt.target_bbPM_list, target, /*nocgp*/false );
+		//target_scPM_res = devel::scheme::get_res(opt.target_scPM_list, target, /*nocgp*/false );
 		get_rg_radius( target, target_redundancy_filter_rg, rif_radius, target_res, true ); // allatom for target
 		rif_radius += 7.0; // hacky guess
 		::devel::scheme::HBRayOpts hbopt;
@@ -489,6 +703,7 @@ int main(int argc, char *argv[]) {
 				// std::cout << "  zeroing atr component of target bounding steric grids" << std::endl;
 				for( int iresl = 0; iresl < RESLS.size(); ++iresl ){
 					float correction = 1.0/RESLS[iresl];
+					//float correction = 0.5;
 					if( correction >= 1.0 ) break;
 					BOOST_FOREACH( VoxelArrayPtr vap, target_bounding_by_atype[iresl] ){
 						if( vap != nullptr ){
@@ -815,11 +1030,13 @@ int main(int argc, char *argv[]) {
 		}
 	}
 
-
+	std::ofstream myfile;
+    if (opt.only_score_input_pos){
+    		myfile.open(opt.dokfile_fname+".sc");
+    }
     if( 0 == opt.scaffold_fnames.size() ){
         std::cout << "WARNING: NO SCAFFOLDS!!!!!!" << std::endl;
     }
-
 	for( int iscaff = 0; iscaff < opt.scaffold_fnames.size(); ++iscaff )
 	{
 		std::string scaff_fname = opt.scaffold_fnames.at(iscaff);
@@ -893,6 +1110,11 @@ int main(int argc, char *argv[]) {
             	rso_config.hydrophobic_manager = hydrophobic_manager;
             	rso_config.require_hydrophobic_residue_contacts = opt.require_hydrophobic_residue_contacts;
             	rso_config.hydrophobic_ddg_cut = opt.hydrophobic_ddg_cut;
+            	rso_config.use_PM = opt.use_pair_motif;
+            	rso_config.mman = core::scoring::motif::MotifHashManager::get_instance();
+
+
+            	
 
             	rso_config.ignore_rifres_if_worse_than = opt.ignore_rifres_if_worse_than;
 
@@ -937,8 +1159,22 @@ int main(int argc, char *argv[]) {
 
 			ScenePtr scene_minimal( scene_prototype->clone_deep() );
 			scene_minimal->add_actor( 0, VoxelActor(target_bounding_by_atype) );
-
-
+			for (int ir:target_scPM_res){
+        		std:cout << "sc   " <<ir << std::endl;
+        		numeric::xyzTransform<core::Real> x_target = core::pose::motif::get_sidechain_reference_frame(target,ir);
+        		char aa = target.residue(ir).name1();
+        		devel::scheme::PMActor scPM(devel::scheme::xyz2eigen(x_target).template cast<float>(),aa,'-');
+				//std::cout << "hereDDDDDDDDD" << std::endl;
+				scene_minimal->add_actor( 0, scPM);
+			}
+			for (int ir:target_bbPM_res){
+        		numeric::xyzTransform<core::Real> x_target = core::pose::motif::get_backbone_reference_frame(target,ir);
+        		char ss = target.secstruct(ir);
+        		char aa = target.residue(ir).name1();
+        		devel::scheme::PMActor bbPM(devel::scheme::xyz2eigen(x_target).template cast<float>(),aa,ss);
+				std::cout << "hereDDDsdfdfgdfg DDDD" << std::endl;
+				scene_minimal->add_actor( 0, bbPM);
+			}
 			///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 			print_header( "setup director based on scaffold and target sizes" ); //////////////////////////////////////////////////////////////////////////////////////////////
 			///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1073,9 +1309,19 @@ int main(int argc, char *argv[]) {
 					     << F( 7, 3, sc[0]       ) << " "
 					     << F( 7, 3, sc[1]       ) << " "
 					     << F( 7, 3, sc[2]       ) << " "
-					     << F( 7, 3, sc[3]       ) << endl;
+					     << F( 7, 3, sc[3]       ) << " " 
+					     << F( 7, 3, sc[4]       ) << endl;
 					if ( opt.need_to_calculate_sasa ) {
 						std::cout << "Sasa: " << (uint16_t) ( sc[3] / SASA_SUBVERT_MULTIPLIER ) << std::endl;
+					}
+					if (i == RESLS.size()-1){
+						myfile << scaff_fname << " "
+						 << F( 7, 3, score ) << " "
+					     << F( 7, 3, sc[0]       ) << " "
+					     << F( 7, 3, sc[1]       ) << " "
+					     << F( 7, 3, sc[2]       ) << " "
+					     << std::to_string((uint16_t) ( sc[3] / SASA_SUBVERT_MULTIPLIER )) << " " 
+					     << F( 7, 3, sc[4]       ) << endl;
 					}
 
 				}
@@ -1142,7 +1388,9 @@ int main(int argc, char *argv[]) {
 			}
 
 			// If this option is set, we skip everything below
-			if (opt.only_score_input_pos) continue;
+			if (opt.only_score_input_pos) {
+				continue;
+			}
 
 			// std::cout << "scores for scaffold in original position: " << std::endl;
    //          {
@@ -1313,8 +1561,7 @@ int main(int argc, char *argv[]) {
 
 
 	} // end scaffold loop
-
-
+	myfile.close();
 	dokout.close();
 
 

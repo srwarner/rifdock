@@ -179,6 +179,58 @@ struct RIFAccumulatorMapThreaded : public RifAccumulator {
 		return sats;
 
 	}
+	std::vector<std::pair<EigenXform,float>> get_scores_of_this_irot_bbpos( devel::scheme::EigenXform const & x, std::pair<int,int> bound) const override {
+		//std::cout << "being use" << std::endl;
+		std::vector<std::pair<EigenXform,float>> scores;
+
+		uint64_t const key = xmap_ptr_->hasher_.get_key( x );
+		EigenXform bb_pos = xmap_ptr_ -> hasher_.get_center(key);
+		typename XMap::Map & map_for_this_thread(xmap_ptr_->map_);
+		typename XMap::Map::iterator iter = map_for_this_thread.find(key);
+
+		typedef typename XMap::Value Value;
+
+
+		if( iter == map_for_this_thread.end() ){
+			return scores;
+		} else {
+
+			Value const & rotscores = iter->second;
+			static int const Nrots = Value::N;
+
+			for( int i_rs = 0; i_rs < Nrots; ++i_rs ){
+				if( rotscores.empty(i_rs) ) {
+					break;
+				}
+
+                int _irot = rotscores.rotamer(i_rs);
+
+                if ( (bound.first >= _irot) || (bound.second - 1 <= _irot) ) continue;
+                float _iscore = rotscores.score(i_rs);
+
+				std::vector<int> sat_groups;
+				rotscores.rotamer_sat_groups( i_rs, sat_groups );
+				if (sat_groups.size()==0){
+					scores.push_back(std::make_pair(bb_pos,_iscore));
+				} 
+				// if (sat_groups.size() != 0) {
+				// 	std::cout << sat_groups[0] << ":" <<  sat_groups[1] << std::endl;
+				// } 
+				// else {
+				// 	std::cout << "empty sat groups:" <<  _iscore <<  " " << std::endl;
+				// }
+				// for ( int number : sat_groups ) {
+				// 	std::cout << "sat: " << number << std::endl;
+				// 	if (number == 254) continue;
+				// 	std::cout << "found " << std::endl;
+				// 	scores.push_back(_iscore);
+				// }
+			}
+		}
+
+		return scores;
+
+	}
 
 	uint64_t mem_use() const {
 		uint64_t mem = 0;

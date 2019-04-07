@@ -48,6 +48,7 @@ struct RifAccumulator {
 	virtual void clear() = 0; // seems to only clear temporary storage....
 	virtual uint64_t count_these_irots( int irot_low, int irot_high ) const = 0;
 	virtual std::set<size_t> get_sats_of_this_irot( devel::scheme::EigenXform const & x, int irot ) const = 0;
+	virtual std::vector<std::pair<EigenXform,float>> get_scores_of_this_irot_bbpos( devel::scheme::EigenXform const & x, std::pair<int,int> bound) const = 0;
 };
 typedef shared_ptr<RifAccumulator> RifAccumulatorP;
 

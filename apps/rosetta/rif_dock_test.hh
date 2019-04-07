@@ -2,13 +2,14 @@
 
 #include <basic/options/option_macros.hh>
 #include <basic/options/keys/corrections.OptionKeys.gen.hh>
+
+
 #include <riflib/scaffold/nineA_util.hh>
 #include <vector>
 
 #ifdef GLOBAL_VARIABLES_ARE_BAD
 	#ifndef INCLUDED_rif_dock_test_hh_1
 	#define INCLUDED_rif_dock_test_hh_1   
-
 
 
 OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
@@ -21,6 +22,7 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
 	OPT_1GRP_KEY(  Boolean     , rif_dock, replace_orig_scaffold_res )
 	OPT_1GRP_KEY(  Boolean     , rif_dock, replace_all_with_ala_1bre )
 	OPT_1GRP_KEY(  Boolean     , rif_dock, random_perturb_scaffold )
+	OPT_1GRP_KEY(  Boolean     , rif_dock, align_scaffold_to_pos )
 
 	OPT_1GRP_KEY(  StringVector, rif_dock, target_bounding_xmaps )
 	OPT_1GRP_KEY(  String      , rif_dock, target_pdb )
@@ -263,6 +265,12 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
 
     OPT_1GRP_KEY(  IntegerVector, rif_dock, requirements )
 
+    OPT_1GRP_KEY( Boolean	   , rif_dock, use_pair_motif)
+    OPT_1GRP_KEY( String, rif_dock, target_bbPM_list)
+    OPT_1GRP_KEY( String, rif_dock, target_scPM_list)
+
+    //OPT_1GTP_KEY( String, rif_dock, test_mf)
+
  
 
 		void register_options() {
@@ -279,6 +287,7 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
 			NEW_OPT(  rif_dock::replace_orig_scaffold_res, "", true );
 			NEW_OPT(  rif_dock::replace_all_with_ala_1bre, "" , false );
 			NEW_OPT(  rif_dock::random_perturb_scaffold, "" , false );
+			NEW_OPT(  rif_dock::align_scaffold_to_pos, "", false);
 
 			NEW_OPT(  rif_dock::target_bounding_xmaps, "" , utility::vector1<std::string>() );
 			NEW_OPT(  rif_dock::target_pdb, "" , "" );
@@ -520,7 +529,9 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
             NEW_OPT(  rif_dock::buried_list, "temp", "" );
 
             NEW_OPT(  rif_dock::requirements,        "which rif residue should be in the final output", utility::vector1< int >());
-
+            NEW_OPT(  rif_dock::use_pair_motif," ", false);
+            NEW_OPT(  rif_dock::target_bbPM_list," ","");
+            NEW_OPT(  rif_dock::target_scPM_list," ","");
 
 
 		}
@@ -623,6 +634,7 @@ struct RifDockOpt
     std::vector<std::string> rotamer_boltzmann_fnames;
     bool        rotboltz_ignore_missing_rots         ;
 	bool        random_perturb_scaffold              ;
+	bool        align_scaffold_to_pos				 ;
 	bool        dont_use_scaffold_loops              ;
 	bool        cache_scaffold_data                  ;
 	float       rf_resl                              ;
@@ -764,7 +776,10 @@ struct RifDockOpt
     float       sasa_cut                             ;
     float       score_per_1000_sasa_cut              ;
     std::set<int> skip_sasa_for_res                  ;
-    
+   	std::string target_bbPM_list				     ;
+    std::string target_scPM_list				     ;
+    bool 		use_pair_motif                       ;
+
 
 
     void init_from_cli();
@@ -868,6 +883,7 @@ struct RifDockOpt
         rotamer_onebody_inclusion_threshold    = option[rif_dock::rotamer_onebody_inclusion_threshold   ]();
         rotboltz_ignore_missing_rots           = option[rif_dock::rotboltz_ignore_missing_rots          ]();
 		random_perturb_scaffold                = option[rif_dock::random_perturb_scaffold               ]();
+		align_scaffold_to_pos				   = option[rif_dock::align_scaffold_to_pos                 ]();
 		dont_use_scaffold_loops                = option[rif_dock::dont_use_scaffold_loops               ]();
 		cache_scaffold_data                    = option[rif_dock::cache_scaffold_data                   ]();
 		rf_resl                                = option[rif_dock::rf_resl                               ]();
@@ -993,8 +1009,9 @@ struct RifDockOpt
         score_per_1000_sasa_cut                 = option[rif_dock::score_per_1000_sasa_cut              ]();
 
         buried_list                             = option[rif_dock::buried_list                          ]();
-
-
+        target_bbPM_list						=option[rif_dock::target_bbPM_list]();					
+        target_scPM_list						=option[rif_dock::target_scPM_list]();
+        use_pair_motif                          =option[rif_dock::use_pair_motif]();
 
 		for( std::string s : option[rif_dock::scaffolds     ]() )     scaffold_fnames.push_back(s);
 		for( std::string s : option[rif_dock::scaffold_res  ]() ) scaffold_res_fnames.push_back(s);

@@ -44,6 +44,10 @@
 #include <protocols/ligand_docking/GALigandDock/GridScorer.hh>
 #endif
 
+#include <core/scoring/motif/motif_hash_stuff.hh>
+#include <core/pose/motif/reference_frames.hh>
+#include <numeric/xyzTransform.hh>
+
 
 namespace devel {
 namespace scheme {
@@ -939,8 +943,81 @@ std::string get_rif_type_from_file( std::string fname )
 	in.read(buf,s);
 	return std::string(buf);
 }
+//////////////////////////////////// ScorePMActor ////////////////////////////////////////////
+    
+    struct ScorePMActorResult {
+        float val_;
+        ScorePMActorResult() : val_(0) {}
+        ScorePMActorResult( float f ) : val_(f) {}
+        operator float() const { return val_; }
+        void operator=( float f ) { val_ = f; }
+        void operator+=( float f ) { val_ += f; }
+        bool operator<( ScorePMActorResult const & other ) const { return val_ < other.val_; }
+    };
+    template<class PMActor>
+    struct ScorePMActor {
+        typedef ScorePMActorResult Result;
+        typedef std::pair<PMActor,PMActor> Interaction;
+        
+        core::scoring::motif::MotifHashManager* mman_ = nullptr;
+        ScorePMActor() {};
+        void init(core::scoring::motif::MotifHashManager *mman){
+            mman_ = mman;
+        }        
+        template<class Config>
+        Result operator()( PMActor const & target, PMActor const & scaffold, Config const& c ) const {
+            if (mman_ == nullptr) {return 0;}
+            //std::cout << "in the function? " << std::endl;
+            core::scoring::motif::XformScoreCOP xs_fxn1;
+            if (target.aa_ != '-' && scaffold.aa_ != '-'){utility_exit_with_message("something weird");}
+            auto *target_p = &target;
+            auto *scaffold_p = &scaffold;
+            if (scaffold.aa_ != '-') {target_p = &scaffold; scaffold_p = &target; }
+            if (target_p->ss_ == '-' && target_p->aa_ != '-') {
+                //std::cout << "getting SC_BB" << std::endl;
+                xs_fxn1 = mman_ -> get_xform_score_SC_BB(target_p->aa_);
+            }
+            else {
+                xs_fxn1 = mman_ -> get_xform_score_BB_BB(target_p->ss_, scaffold_p-> ss_, target_p->aa_);
+            }
+            //core::scoring::motif::XformScoreCOP xs_sc_bb_fxn1 = mman_ -> get_xform_score_SC_BB(sc.aa_);
+            numeric::xyzTransform<core::Real> pm_key = get_pm_key(*target_p, *scaffold_p);
+            float motif_score = 0;
+            if ( (xs_fxn1) && (pm_key.t.length_squared() < 100.0)) {
+                motif_score = xs_fxn1 -> score_of_bin(pm_key);
+                assert(motif_score >= 0);
+                motif_score = (-1-motif_score)*3;
+                //std::cout << "get score!! "<<  motif_score << std::endl;
+ //         if (tmp1 > 1.0 || !use_log) scbb_motif += use_log ? fastlog(tmp1) : tmp1;
+            }
+            return motif_score;
+        }
+        numeric::xyzTransform<core::Real>
+        get_pm_key(PMActor const & sc, PMActor const & bb) const {
+            // numeric::xyzVector<core::Real> sc_Vn, sc_Vca, sc_Vc, bb_Vn, bb_Vca, bb_Vc;
+            // sc.get_n_ca_c_coreReal(sc_Vn, sc_Vca, sc_Vc);
+            // bb.get_n_ca_c_coreReal(bb_Vn, bb_Vca, bb_Vc);
+            // numeric::xyzTransform<core::Real> x_sc = core::pose::motif::get_backbone_reference_frame(sc_Vn, sc_Vca, sc_Vc);
+            // numeric::xyzTransform<core::Real> x_bb = core::pose::motif::get_backbone_reference_frame(bb_Vn, bb_Vca, bb_Vc);
+            auto x = sc.position().inverse() * bb.position();
+            numeric::xyzTransform<core::Real> impose = eigen2xyz(x.template cast<double>());
+            return impose;
+        }
 
+ //        template<class Config>
+ //        Result operator()( RIFAnchor const & sc, BBActor const & bb, Config const& c ) const {
+ // //            core::scoring::motif::XformScoreCOP xs_sc_bb_fxn1 = mman_ -> get_xform_score_SC_BB(sc_aa);
+ // //            numeric::xyzTransform<core::Real> impose = sc.inverse() * bb;
+ // //            float scbb_motif = 0;
+ // //            if ( (xs_sc_bb_fxn1) && (impose.t.length_squared() < 100.0)) {
+ // //                scbb_motif = xs_sc_bb_fxn1 -> score_of_bin(impose);
+ // //                std::cout << ": get score!! "<<  scbb_motif << std::endl;
+ // // //         if (tmp1 > 1.0 || !use_log) scbb_motif += use_log ? fastlog(tmp1) : tmp1;
+ // //            }
+ //            return 0;
+ //        }
 
+    };
 
 
 
@@ -1673,6 +1750,9 @@ struct RifFactoryImpl :
             BBSasaActor,
             VoxelArrayPtr
         > MyScoreBBSasaActorRIF;
+    typedef ScorePMActor<
+            PMActor
+        > MyScorePMActor;
 
 
 	typedef ::scheme::objective::ObjectiveFunction<
@@ -1680,7 +1760,8 @@ struct RifFactoryImpl :
 				MyScoreBBActorRIF,
 				MyClashScore,
                 MyScoreBBHBondActorRIF,
-                MyScoreBBSasaActorRIF   
+                MyScoreBBSasaActorRIF,
+                MyScorePMActor
 			>,
 			int // Config type, just resl
 		> MyRIFObjective;
@@ -1854,6 +1935,9 @@ struct RifFactoryImpl :
 			if ( config.requirements.size() > 0 ){
 			  dynamic_cast<MySceneObjectiveRIF&>(*op).objective.template get_objective<MyScoreBBActorRIF>().requirements_ = config.requirements;
 			}
+            if ( config.use_PM) {
+              dynamic_cast<MySceneObjectiveRIF&>(*op).objective.template get_objective<MyScorePMActor>().init( config.mman );
+            }
 		}
 		// dynamic_cast<MySceneObjectiveRIF&>(*packing_objective).objective.template get_objective<MyScoreBBActorRIF>().rotamer_energies_1b_ = config.local_onebody;
 		// dynamic_cast<MySceneObjectiveRIF&>(*packing_objective).objective.template get_objective<MyScoreBBActorRIF>().scaffold_rotamers_ = config.local_rotamers;
@@ -1901,7 +1985,11 @@ struct RifFactoryImpl :
             dynamic_cast<MySceneObjectiveRIF&>(*packing_objectives.back()).objective.template get_objective<MyScoreBBSasaActorRIF>()
                                     .init( config.sasa_grid, config.sasa_threshold, config.sasa_multiplier );
         }
-
+        //enable PMActor scoring
+        if ( false ) {
+            dynamic_cast<MySceneObjectiveRIF&>(*objectives.back()).objective.template get_objective<MyScorePMActor>()
+                                    .init( config.mman );
+        }
 
 
         if ( config.burial_manager ) {
