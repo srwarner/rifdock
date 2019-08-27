@@ -64,13 +64,33 @@ setup_seeding_positions( RifDockOpt & opt, ProtocolData & pd, ScaffoldProviderOP
             utility_exit_with_message( "-seeding_files list not same length as -scaffolds list" );
         }
         runtime_assert_msg(parse_seeding_file(seeding_fname, *seeding_positions, opt.seeding_by_patchdock, opt.patchdock_min_sasa, opt.patchdock_top_ranks), "Faild to parse the seeding file!!!");
-        
+        ScaffoldDataCacheOP scaffold_data = scaffold_provider->get_data_cache_slow( ScaffoldIndex() );
         Eigen::Vector3f scaffold_center = scaffold_provider->get_data_cache_slow(ScaffoldIndex())->scaffold_center;
 
         if ( ! opt.apply_seeding_xform_after_centering ) {
             EigenXform x(EigenXform::Identity());
             x.translation() = scaffold_center;
             for( auto & t : *seeding_positions ) t = t * x;
+        }
+
+        if ( opt.align_seeding_xform_by_scaffold_res) {
+
+            core::pose::PoseCOP scaffoldCOP = scaffold_data -> scaffold_unmodified_p;
+            utility::vector1<core::Size> scaffold_res = *(scaffold_data->scaffold_res_p);
+            std::vector<EigenXform> tmp_seeding_positions = *seeding_positions;
+            seeding_positions -> resize(seeding_positions -> size() * scaffold_res.size(), EigenXform::Identity());
+            int seed_index = 0;
+            for (auto res : scaffold_res) {
+                EigenXform x(EigenXform::Identity());
+                Eigen::Vector3f CA ( scaffoldCOP -> residue(res).xyz("CA").x(), scaffoldCOP -> residue(res).xyz("CA").y(), scaffoldCOP -> residue(res).xyz("CA").z() );
+                x.translation() = scaffold_center - CA;
+                for( auto tmp : tmp_seeding_positions){
+                    seeding_positions -> at(seed_index) = x * tmp;
+                    seed_index += 1;
+                }
+            }
+            //input.size();
+            //seeding_positions ->size();
         }
 
         if ( opt.write_seed_to_output ) {

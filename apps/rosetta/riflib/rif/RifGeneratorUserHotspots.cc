@@ -523,7 +523,7 @@ namespace rif {
                                         accumulator->insert( new_x_position, positioned_rotamer_score + opts.hotspot_score_bonus, irot, sat1, sat2, force_hotspot, single_thread);
 
 
-
+                                        #pragma omp critical
 									 	if (opts.dump_hotspot_samples>=NSAMP){
 									 		hotspot_dump_file <<"MODEL        "<<irot<<a<<"                                                                  \n";
 											for( auto a : rotamer_atoms ){

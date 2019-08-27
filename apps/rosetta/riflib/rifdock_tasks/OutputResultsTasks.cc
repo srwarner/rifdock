@@ -22,12 +22,15 @@
 #include <core/pose/PDBInfo.hh>
 #include <core/pose/util.hh>
 #include <core/pose/Pose.hh>
+#include <core/import_pose/import_pose.hh>
 #include <core/io/silent/BinarySilentStruct.hh>
 #include <core/io/silent/SilentFileData.hh>
 #include <core/io/silent/SilentFileOptions.hh>
+#include <core/scoring/rms_util.hh>
 
 #include <string>
 #include <vector>
+#include <boost/algorithm/string.hpp>
 
 
 #include <ObjexxFCL/format.hh>
@@ -106,7 +109,6 @@ OutputResultsTask::return_rif_dock_results(
 /////
 
         rdd.director->set_scene( selected_result.index, director_resl_, *rdd.scene_minimal );
-
         std::vector<float> unsat_scores;
         int unsats = -1;
         int buried = -1;
@@ -191,7 +193,14 @@ OutputResultsTask::return_rif_dock_results(
         std::cout << extra_output.str() << std::flush;
 
     }
-
+    if ( rdd.opt.outputsilent  && out_silent_stream.stream().tellp() == 0) {
+        //std::cout << "----------------"<<out_silent_stream.stream().tellp() << std::endl;
+        std::string output_filname = out_silent_stream.filename();
+        out_silent_stream.close();
+        char char_array[output_filname.length() + 1]; 
+        strcpy(char_array, output_filname.c_str());
+        remove(char_array);
+    }
     return selected_results_p;
 
 }
@@ -253,6 +262,10 @@ dump_rif_result_(
     std::ostringstream packout, allout;
     // TYU change to vector of strings instead of string
     std::map< int, std::vector<std::string> > pikaa;
+    // tmp changes to mmatch to hotspot 
+    core::pose::PoseOP trp_in = core::import_pose::pose_from_file(static_cast<std::string>("/home/tayi/project/met/peptides/start/trp_aligned.pdb"));
+    core::pose::PoseOP tyr_in = core::import_pose::pose_from_file(static_cast<std::string>("/home/tayi/project/met/peptides/start/tyr1_aligned.pdb"));
+    std::map<int, std::tuple<int, float, core::pose::PoseOP>> hotres;
     int chain_no = pose_from_rif.num_chains();   
     int res_num = pose_from_rif.size() + 1;
     const std::string chains = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -265,27 +278,31 @@ dump_rif_result_(
             std::vector< std::pair< float, int > > rotscores;
             rdd.rif_ptrs[rif_resl]->get_rotamers_for_xform( bba.position(), rotscores );
             typedef std::pair<float,int> PairFI;
+
+            core::pose::PoseOP res1op, res2op;
+            hotres.insert(std::make_pair(1,std::make_tuple(0, 100.0, res1op)));
+            hotres.insert(std::make_pair(2,std::make_tuple(0, 100.0, res2op)));
+
             BOOST_FOREACH( PairFI const & p, rotscores ){
                 int const irot = p.second;
                 float const onebody = scaffold_onebody_glob0.at( ires ).at( irot );
                 float const sc = p.first + onebody;
                 float const rescore = rdd.rot_tgt_scorer.score_rotamer_v_target( irot, bba.position(), 10.0, 4 );
+               
                 if( sc < 0 || rescore + onebody < 0  || p.first + onebody < 0){
                     if ( ! rdd.opt.rif_rots_as_chains) {
                         allout << "MODEL" << endl;
                     }
-                    BOOST_FOREACH( SchemeAtom a, rdd.rot_index_p->rotamers_.at( irot ).atoms_ ){
-                        a.set_position( xalignout * bba.position() * a.position() ); // is copy
-                        a.nonconst_data().resnum = rdd.opt.rif_rots_as_chains ? res_num : ires;
-                        a.nonconst_data().chain = rdd.opt.rif_rots_as_chains ? chains.at( chain_no % 52 ) : 'A';
-                        ::scheme::actor::write_pdb( allout, a, nullptr );
-                    }
-                    if (! rdd.opt.rif_rots_as_chains) {
-                        allout << "ENDMDL" << endl;
-                    } else {
-                        allout << "TER" << endl;
-                        res_num++;
-                        chain_no++;
+                    // Brian
+                    std::pair< int, int > sat1_sat2 = rdd.rif_ptrs.back()->get_sat1_sat2(bba.position(), irot);
+                    bool rot_was_placed = false;
+                    if (rdd.opt.hack_pack) {
+                        for ( std::pair<intRot,intRot> const & placed_rot : selected_result.rotamers() ) {
+                            if ( placed_rot.first == bba.index_ && placed_rot.second == irot ) {
+                                rot_was_placed = true;
+                                break;
+                            }
+                        }
                     }
                     // TYU change to std::string for expanded oneletter map
                     std::string oneletter = rdd.rot_index_p->oneletter(irot);
@@ -293,17 +310,46 @@ dump_rif_result_(
                         pikaa[ires+1].push_back(oneletter);
                     }
 
-
-                    // Brian
-                    std::pair< int, int > sat1_sat2 = rdd.rif_ptrs.back()->get_sat1_sat2(bba.position(), irot);
-
-                    bool rot_was_placed = false;
-                    for ( std::pair<intRot,intRot> const & placed_rot : selected_result.rotamers() ) {
-                        if ( placed_rot.first == bba.index_ && placed_rot.second == irot ) {
-                            rot_was_placed = true;
-                            break;
-                        }
+                    BOOST_FOREACH( SchemeAtom a, rdd.rot_index_p->rotamers_.at( irot ).atoms_ ){
+                        a.set_position( xalignout * bba.position() * a.position() ); // is copy
+                        a.nonconst_data().resnum = rdd.opt.rif_rots_as_chains ? res_num : ires;
+                        a.nonconst_data().chain = rdd.opt.rif_rots_as_chains ? chains.at( chain_no % 52 ) : 'A';
+                        ::scheme::actor::write_pdb( allout, a, nullptr );
                     }
+                    if (sat1_sat2.first > -1) {
+                        core::conformation::ResidueOP irot_tmp = rdd.rot_index_p -> get_rotamer_at_identity(irot);
+                        apply_xform_to_residue(*irot_tmp,xalignout * bba.position());
+                        core::pose::Pose irot_pos;
+                        irot_pos.append_residue_by_jump(*irot_tmp,1);
+                        if (oneletter =="W") {
+                            float rms = core::scoring::all_scatom_rmsd_nosuper(irot_pos,*trp_in);
+                            if (rms < std::get<1>(hotres[1])) {
+                                std::get<2>(hotres[1]) = irot_pos.clone();
+                                std::get<0>(hotres[1]) = ires + 1;
+                            }
+                            //std::cout << "W: " << irot << " " << core::scoring::all_scatom_rmsd_nosuper(irot_pos,*trp_in) <<std::endl;
+                        } else if (oneletter =="Y") {
+                            float rms = core::scoring::all_scatom_rmsd_nosuper(irot_pos,*tyr_in);
+                            if (rms < std::get<1>(hotres[2])) {
+                                std::get<2>(hotres[2]) = irot_pos.clone();
+                                std::get<0>(hotres[2]) = ires + 1;
+                            }
+                            //std::cout << "Y: " << irot << " " << core::scoring::all_scatom_rmsd_nosuper(irot_pos,*tyr_in)<<std::endl;
+                        }
+
+                    }
+
+
+
+                    if (! rdd.opt.rif_rots_as_chains) {
+                        allout << "ENDMDL" << endl;
+                    } else {
+                        allout << "TER" << endl;
+                        res_num++;
+                        chain_no++;
+                    }
+
+ 
 
                     float rotboltz = 0;
                     if ( sdc->rotboltz_data_p ) {
@@ -311,7 +357,6 @@ dump_rif_result_(
                             rotboltz = sdc->rotboltz_data_p->at(ires)[irot];
                         }
                     }
-
                     if ( ! quiet ) {
 
                         std::cout << ( rot_was_placed ? "*" : " " );
@@ -337,13 +382,33 @@ dump_rif_result_(
                         brian_pair.first = ires + 1;
                         brian_pair.second = "HOT_IN:" + str(sat1_sat2.first);
                         brians_infolabels.push_back(brian_pair);
-                    }
 
+                    }
+                
                 }
 
             }
         }
 
+    }
+    // not sure why i need to check this here but results are filtering through somehow
+    if (rdd.opt.requirements.size() != 0) {
+        std::map<int, bool> passes;
+        for (auto req : rdd.opt.requirements) {
+            passes.insert(std::make_pair(req, false));
+        }
+
+        for (auto info : brians_infolabels) {
+            std::vector<std::string> tmp_split;
+            boost::split(tmp_split, info.second, [](char c){return c == ':';});
+            if (tmp_split.size() != 2) continue;
+            passes[std::stoi(tmp_split[1])] = true;
+        }
+        bool out = true;
+        for (auto pass : passes){
+            out &= pass.second;
+        }
+        if (!out) return;
     }
 
     if ( unsat_scores.size() > 0 ) {
@@ -400,6 +465,14 @@ dump_rif_result_(
             pose_from_rif.set_chi( ichi+1, ires+1, rdd.rot_index_p->chi( irot, ichi ) );
         }
         needs_RIFRES.push_back(ires+1);
+    }
+    // replace with hotspot 
+    if (true) {
+        for (auto const & x : hotres) {
+            int res = std::get<0>(x.second);
+            core::pose::PoseOP poseop = std::get<2>(x.second);
+            pose_from_rif.replace_residue( res, poseop -> residue(1), true ); 
+        }
     }
 
     // Add PDBInfo labels if they are applicable

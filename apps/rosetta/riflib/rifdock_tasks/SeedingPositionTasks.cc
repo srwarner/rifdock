@@ -126,17 +126,19 @@ create_rifine_task(
     task_list.push_back(make_shared<FilterByFracTask>( opt.hack_pack_frac, 0, opt.filter_seeding_positions_separately, opt.filter_scaffolds_separately ));
 
     task_list.push_back(make_shared<SetFaModeTask>( true ));
-    task_list.push_back(make_shared<FilterForHackPackTask>( 1, 0, 0, opt.hackpack_score_cut ));
-    task_list.push_back(make_shared<HackPackTask>(  0, final_resl, 9e9 )); // hackpack sorts the results
+    if ( opt.hack_pack ) {
+        task_list.push_back(make_shared<FilterForHackPackTask>( 1, 0, 0, opt.hackpack_score_cut ));
+        task_list.push_back(make_shared<HackPackTask>(  0, final_resl, 9e9 )); // hackpack sorts the results
+    }
 
 
     if ( opt.score_per_1000_sasa_cut < 0 ) {
         task_list.push_back(make_shared<FilterByScorePer1000SasaTask>( opt.score_per_1000_sasa_cut ));
     }
 
-    task_list.push_back(make_shared<FilterByScoreCutTask>( opt.cluster_score_cut ));
-    task_list.push_back(make_shared<FilterByBiggestBlocksFracTask>( opt.keep_top_clusters_frac, opt.filter_seeding_positions_separately, opt.filter_scaffolds_separately, true ));
-    task_list.push_back(make_shared<FilterByScoreCutTask>( opt.global_score_cut ));
+    //task_list.push_back(make_shared<FilterByScoreCutTask>( opt.cluster_score_cut)); //opt.cluster_score_cut
+    //task_list.push_back(make_shared<FilterByBiggestBlocksFracTask>( opt.keep_top_clusters_frac, opt.filter_seeding_positions_separately, opt.filter_scaffolds_separately, true ));
+    //task_list.push_back(make_shared<FilterByScoreCutTask>( opt.global_score_cut )); //opt.global_score_cut
     // task_list.push_back(make_shared<CompileAndFilterResultsTask>( 0, final_resl, 100000000, opt.redundancy_filter_mag, 0, 0, 
     //                                                                                   opt.filter_seeding_positions_separately, opt.filter_scaffolds_separately )); 
     
@@ -144,7 +146,7 @@ create_rifine_task(
         task_list.push_back(make_shared<RemoveRedundantPointsTask>( opt.redundancy_filter_mag, 0, opt.filter_seeding_positions_separately, opt.filter_scaffolds_separately ));
     }
 
-    task_list.push_back(make_shared<DumpSeedingClusterScoreTask>());
+    //task_list.push_back(make_shared<DumpSeedingClusterScoreTask>());
 
     bool do_rosetta_score = opt.rosetta_score_fraction > 0;
     bool do_rosetta_min = do_rosetta_score && opt.rosetta_min_fraction > 0;

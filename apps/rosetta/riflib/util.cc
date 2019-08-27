@@ -613,8 +613,6 @@ find_xform_from_identical_pose_to_pose(
 	
 }
 
-
-
 void
 apply_xform_to_pose( core::pose::Pose & pose, EigenXform const & xform) {
 	numeric::xyzTransform<float> transform = eigen2xyz( xform );

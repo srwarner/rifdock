@@ -94,9 +94,10 @@ awful_compile_output_helper_(
     typedef tmplXRtriple<EigenXform, ScaffoldIndex> XRtriple;
 
     SearchPointWithRots const & sp = packed_results[isamp];
-    // if( sp.score >= 0.0f ) return;   // legacy. There seems to be no reason to do this.
+    //if( sp.score >= 0.0f ) return;   // legacy. There seems to be no reason to do this.
     ScenePtr scene_minimal( scene_pt[omp_get_thread_num()] );
     director->set_scene( sp.index, director_resl, *scene_minimal );
+
     std::vector<float> sc = objective->scores(*scene_minimal);
     float _nopackscore = 0;
     for ( float f : sc ) _nopackscore += f;

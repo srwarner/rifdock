@@ -239,6 +239,7 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
     OPT_1GRP_KEY(  Integer     , rif_dock, patchdock_top_ranks )
     OPT_1GRP_KEY(  Boolean     , rif_dock, seeding_by_patchdock )
     OPT_1GRP_KEY(  Boolean     , rif_dock, apply_seeding_xform_after_centering )
+    OPT_1GRP_KEY(  Boolean	   , rif_dock, align_seeding_xform_by_scaffold_res)
     OPT_1GRP_KEY(  String      , rif_dock, xform_pos )
     OPT_1GRP_KEY(  Integer     , rif_dock, rosetta_score_each_seeding_at_least )
     OPT_1GRP_KEY(  Real        , rif_dock, cluster_score_cut )
@@ -265,6 +266,8 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
     OPT_1GRP_KEY(  String      , rif_dock, buried_list )
 
     OPT_1GRP_KEY(  IntegerVector, rif_dock, requirements )
+
+    OPT_1GRP_KEY( Real         , rif_dock, request_num_thread)
 
  
 
@@ -499,6 +502,7 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
             NEW_OPT(  rif_dock::patchdock_top_ranks, "only use the top solutions of patchdock to do refinement, the default is to use all of them", 99999);
             NEW_OPT(  rif_dock::seeding_by_patchdock, "The format of seeding file can be either Rosetta Xform or raw patchdock outputs", true );
             NEW_OPT(  rif_dock::apply_seeding_xform_after_centering, "Apply the seeding position xforms after moving scaffold to center", false );
+            NEW_OPT(  rif_dock::align_seeding_xform_by_scaffold_res, "Align the seeding position by scaffold residues", false);
             NEW_OPT(  rif_dock::xform_pos, "" , "" );
             NEW_OPT(  rif_dock::rosetta_score_each_seeding_at_least, "", -1 );
             NEW_OPT(  rif_dock::cluster_score_cut, "", 0);
@@ -527,6 +531,7 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
             NEW_OPT(  rif_dock::buried_list, "temp", "" );
 
             NEW_OPT(  rif_dock::requirements,        "which rif residue should be in the final output", utility::vector1< int >());
+            NEW_OPT(  rif_dock::request_num_thread, "this number of threads will be used for OpenMP" , 1 );
 
 
 
@@ -751,6 +756,7 @@ struct RifDockOpt
     float       keep_top_clusters_frac               ;
     bool        seeding_by_patchdock                 ;
     bool        apply_seeding_xform_after_centering  ;
+    bool        align_seeding_xform_by_scaffold_res  ;
     float       patchdock_min_sasa                   ;
     int         patchdock_top_ranks                  ;
 
@@ -775,6 +781,7 @@ struct RifDockOpt
     float       sasa_cut                             ;
     float       score_per_1000_sasa_cut              ;
     std::set<int> skip_sasa_for_res                  ;
+    int         request_num_thread                   ;
     
 
 
@@ -986,6 +993,7 @@ struct RifDockOpt
 
 		seeding_by_patchdock                    = option[rif_dock::seeding_by_patchdock                 ]();
         apply_seeding_xform_after_centering     = option[rif_dock::apply_seeding_xform_after_centering  ]();
+        align_seeding_xform_by_scaffold_res     = option[rif_dock::align_seeding_xform_by_scaffold_res  ]();
         xform_fname                             = option[rif_dock::xform_pos                            ]();
         rosetta_score_each_seeding_at_least     = option[rif_dock::rosetta_score_each_seeding_at_least  ]();
         cluster_score_cut                       = option[rif_dock::cluster_score_cut                    ]();
@@ -1008,6 +1016,7 @@ struct RifDockOpt
         score_per_1000_sasa_cut                 = option[rif_dock::score_per_1000_sasa_cut              ]();
 
         buried_list                             = option[rif_dock::buried_list                          ]();
+        request_num_thread                      = option[rif_dock::request_num_thread                   ]();
 
 
 

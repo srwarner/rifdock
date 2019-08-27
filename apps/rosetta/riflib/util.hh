@@ -37,9 +37,34 @@ namespace scheme {
 #ifdef USE_OPENMP
  #include <omp.h>
  #endif
+static int omp_thread_count() {
+    int n = 0;
+    #pragma omp parallel reduction(+:n)
+    n += 1;
+    return n;
+}
+static int omp_max_thread_count() {
+	#ifdef USE_OPENMP
+		//omp_set_dynamic(0);
+		omp_set_num_threads(omp_thread_count());
+		return omp_get_max_threads();
+	#else
+		return 1;
+	#endif
+}
+static int omp_max_thread_count_request(int request) {
+	#ifdef USE_OPENMP
+		omp_set_dynamic(0);
+		omp_set_num_threads(request);
+		return omp_get_max_threads();
+	#else
+		return 1;
+	#endif
+}
  static core::Size omp_max_threads_1(){
 	#ifdef USE_OPENMP
-		return omp_get_max_threads();
+ 		return omp_max_thread_count();
+		//return omp_get_max_threads();
 	#else
 		return 1;
 	#endif

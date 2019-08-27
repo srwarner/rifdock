@@ -408,10 +408,13 @@ namespace rif {
 
 			int irot = rots[ijob];
 			std::string resn = rot_index_p->rotamers_[irot].resname_;
-
+			// use the same score cutoff for d as for L
+			if (rot_index_p -> d_l_map_.find(resn) != rot_index_p -> d_l_map_.end()) {
+				resn = rot_index_p -> d_l_map_.find(resn) -> second;
+			}
 			runtime_assert_msg( abs_score_cut_by_res.find(resn) != abs_score_cut_by_res.end(), "unsupported res "+resn );
 			float const abs_score_cut_by_res_thisres = abs_score_cut_by_res[resn] * opts.score_cut_adjust;
-
+			resn = rot_index_p->rotamers_[irot].resname_;
 			// utility::io::ozstream rif_apo_vis_out("rif_apo_vis_"+resn+str(irot)+".pdb");
 
 			{

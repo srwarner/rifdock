@@ -45,6 +45,7 @@ private:
 
 };
 
+
 void
 dump_rif_result_(
     RifDockData & rdd,
@@ -70,5 +71,6 @@ dump_search_point_(
 
 
 }}
+
 
 #endif

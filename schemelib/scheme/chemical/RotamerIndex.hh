@@ -1027,6 +1027,11 @@ struct RotamerIndex {
 	int protonchi_parent( int i ) const { return protonchi_parent_of_.at(i); }
 	int structural_parent( int i ) const { return structural_parent_of_.at(i); }
 
+	core::conformation::ResidueOP
+	get_rotamer_at_identity( size_t irot ) const {
+		core::chemical::ResidueTypeSetCAP rts = core::chemical::ChemicalManager::get_instance()->residue_type_set("fa_standard");
+		return get_residue_at_identity( rts.lock()->name_map( this->resname(irot)), rotamers_.at(irot).chi_ );
+	}
 
 	void fill_oneletter_map( std::map<std::string,std::string> & oneletter_map ){
 		oneletter_map["ALA"] = 'A';

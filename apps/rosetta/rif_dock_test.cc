@@ -136,6 +136,12 @@ int main(int argc, char *argv[]) {
 		using devel::scheme::print_header;
 		using ::devel::scheme::RotamerIndex;
 
+		std::cout << "Rifdock set number of threads: " << omp_max_thread_count_request(opt.request_num_thread) << std::endl;
+		utility::io::ozstream maxthreadout("threadout.txt",std::ios_base::app);
+		maxthreadout << "____________________________" << "set_num_threads: " << omp_thread_count() << "____________________________\n";
+		maxthreadout.close();
+
+
 	/////////////////////////////////////////////////////////////////////////////////
 	/////////////////////// static shit
 	////////////////////////////////////////////////////////////////////////////////
@@ -607,8 +613,9 @@ int main(int argc, char *argv[]) {
 
 
 /// Prepare DonorAcceptorCaches
-
-
+    //delete me when stuff is merged
+ //    omp_set_dynamic(0); 
+	// omp_set_num_threads(5); 
 
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -823,7 +830,7 @@ int main(int argc, char *argv[]) {
 
 
 	bool needs_nest_director = opt.xform_fname != "IDENTITY";
-	bool needs_stored_nest_director = needs_nest_director && opt.xform_fname != "";
+	bool needs_stored_nest_director = needs_nest_director && opt.xform_fname != "" && opt.xform_fname != "ALL";
 
 	std::vector< EigenXform > xform_positions;
 
@@ -845,7 +852,10 @@ int main(int argc, char *argv[]) {
 
 			runtime_assert( rot_index_p );
 			std::string scafftag = utility::file_basename( utility::file::file_basename( scaff_fname ) );
-
+			utility::io::ozstream maxthreadout("threadout.txt",std::ios_base::app);
+			std::cout << "____________________________" << "max_num_threads: " << omp_max_threads() << "____________________________" << std::endl;
+			maxthreadout << "____________________________" << "max_num_threads: " << omp_max_threads() << "____________________________\n";
+			maxthreadout.close();
 			std::cout << "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////" << std::endl;
 			std::cout << "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////" << std::endl;
 			std::cout << "//////   begin scaffold " << scafftag << " " << iscaff << " of " << opt.scaffold_fnames.size() << std::endl;
@@ -968,19 +978,26 @@ int main(int argc, char *argv[]) {
 				double search_diameter = opt.search_diameter;
 
 				// Ideally one could read these in from the xform file
-				if ( opt.xform_fname.length() > 0 ) {
+				if ( opt.xform_fname.length() > 0 && opt.xform_fname != "ALL") {
 					target_center = F3(0, 0, 0);
 	                body_radius = 15.0;
 					resl0 = 1;
 	                hsearch_scale_factor = 1.2;
 	                search_diameter = 4.0;
+				} else if (opt.xform_fname == "ALL") {
+					target_center = F3(0, 0, 0);
+		            body_radius = 15.0;
+					resl0 = 1;
+		            hsearch_scale_factor = 1.2;
+		            search_diameter = 4.0;
 				}
 
 				double cart_grid = resl0*hsearch_scale_factor/sqrt(3); // 1.5 is a big hack here.... 2 would be more "correct"
 				double hackysin = std::min( 1.0, resl0*hsearch_scale_factor/2.0/ body_radius );
 
 				runtime_assert( hackysin > 0.0 );
-				double const rot_resl_deg0 = asin( hackysin ) * 180.0 / M_PI;
+				//double const rot_resl_deg0 = asin( hackysin ) * 180.0 / M_PI;
+				double const rot_resl_deg0 = 21.0; //14
 				int nside = std::ceil( search_diameter / cart_grid );
 				std::cout << "search dia.    : " <<  search_diameter << std::endl;
 				std::cout << "nside          : " << nside        << std::endl;
