@@ -196,6 +196,13 @@ namespace rif {
 		print_header("Building RIF from resampled user hotspots");
 		// tallying hotspot stats
 		std::map<std::tuple<int,int,std::string>, hotspot_stats> hstats;
+		//saving the seeding pos if output_hotspot_seeding
+		auto rif_ptr = accumulator->rif();
+		std::ofstream seed_pos;
+		if (opts.output_hotspot_seeding != "") {
+  			seed_pos.open(opts.output_hotspot_seeding);
+		}
+
 		for( int i_hotspot_group = 0; i_hotspot_group < this->opts.hotspot_files.size(); ++i_hotspot_group ){
 
 
@@ -263,9 +270,31 @@ namespace rif {
 				}
 			}
       		std::cout << "Processing hotspots... " << std::flush; // No endl here!!!!
+
 			// read in pdb files # i_hotspot_group
 
 			for( int i_hspot_res = 1; i_hspot_res <= myresname.size(); ++i_hspot_res ){
+				if ( seed_pos.is_open() ) {
+					std::ostringstream filename;
+					auto ori_N = pose.residue(i_hspot_res).xyz("N") - xyz_tgt_cen;
+					auto ori_CA = pose.residue(i_hspot_res).xyz("CA") - xyz_tgt_cen;
+					auto ori_C = pose.residue(i_hspot_res).xyz("C") - xyz_tgt_cen;
+					BBActor ori_bbact( ori_N, ori_CA, ori_C);
+					EigenXform trans = ori_bbact.position();
+					uint64_t const key = rif_ptr -> get_bin_key( trans );
+					EigenXform bin_cen = rif_ptr -> get_bin_center(key);
+					std::left(seed_pos);
+					seed_pos << bin_cen.linear().row(0) << ' ' << bin_cen.linear().row(1) <<  ' ' << bin_cen.linear().row(2) << ' ' << bin_cen.translation()[0] << ' ' <<bin_cen.translation()[1] << ' ' << bin_cen.translation()[2] << std::endl;
+					int sat_num = hotspot_requirement_labels[ i_hotspot_group + 1 ];
+					filename << "./" << opts.outdir << "/hotspot_" << sat_num << ".pdb";
+					numeric::xyzMatrix< core::Real > norot = norot.identity();
+					pose.apply_transform_Rx_plus_v(norot, -xyz_tgt_cen);
+					pose.dump_file(filename.str());
+					pose.apply_transform_Rx_plus_v(norot, xyz_tgt_cen);
+
+				}
+				
+
 
 			  //   std::vector<std::string> d_name(myresname.size(),"NONE");
 			  //   // try to find matching d version if use_d_aa
@@ -297,8 +326,6 @@ namespace rif {
                 if (input_nheavy < 3) { // this can happen for disembodied hydroxyls
                     input_nheavy = 3;
                 }
-
-
 
 				EigenXform Xref = ::scheme::chemical::make_stub<EigenXform>(
 		            pose.residue(i_hspot_res).xyz( input_nheavy - 2 ) - xyz_tgt_cen,
@@ -340,8 +367,7 @@ namespace rif {
 					for (int i = 0; i < myresname[i_hspot_res].size(); i++) {
 							auto it = myresname[i_hspot_res][i];
 							auto d_it =  d_name[i_hspot_res][i];
-							std::cout << it << std::endl;
-							std::cout << d_it << std::endl;
+
 						if (params -> rot_index_p -> resname(irot) == it || params -> rot_index_p -> resname(irot) == d_it)
 						{
 							std::vector<SchemeAtom> const & rotamer_atoms( params->rot_index_p->atoms(irot) );
@@ -411,7 +437,7 @@ namespace rif {
 
 							EigenXform O_2_orig_inverse = O_2_orig.inverse();
 
-
+							EigenXform building_x_position = impose * x_orig_position;
 
 							for ( int pass = 0; pass < passes; pass++) {
 								//std::cout << Tran_mtx.block<3,3>(0,0)*rif_res+temp << std::endl;
@@ -431,13 +457,13 @@ namespace rif {
 									EigenXform x_perturb;
 									::scheme::numeric::rand_xform_sphere(rng,x_perturb,radius_bound,radians_bound);
 
-									EigenXform building_x_position = impose * x_orig_position;
+									//EigenXform building_x_position = impose * x_orig_position;
 									if ( pass == 1 ) {
 										building_x_position = O_2_orig_inverse * tyr_thing * O_2_orig * building_x_position;
 									}
 
 									EigenXform x_position = x_2_orig_inverse * x_perturb * x_2_orig * building_x_position;
-									//EigenXform x_position = x_2_orig_inverse * x_2_orig * building_x_position;
+									//EigenXform seed_x_position = x_2_orig_inverse * x_2_orig * building_x_position;
 
 									// you can check their "energies" against the target like this, obviously substituting the real rot# and position
                                     int actual_sat1=-1, actual_sat2=-1, hbcount=0;
@@ -471,16 +497,17 @@ namespace rif {
 
 										BBActor bbact( atom_N, atom_CA, atom_C);
 										EigenXform new_x_position = bbact.position();
-
-										#pragma omp critical
-										{
-											std::map<std::tuple<int,int,std::string>, hotspot_stats>::iterator it;
-											//it = hstats.find(std::make_tuple(0,1,std::string("PHE")));
-											//std::cout << "try to find this: " << i_hotspot_group << " " << i_hspot_res << " " << params -> rot_index_p -> resname(irot) << std::endl;
-											it = hstats.find(std::make_tuple(i_hotspot_group, i_hspot_res, params -> rot_index_p -> resname(irot)));
-											if (it != hstats.end()) {
-												it -> second.scores.push_back(positioned_rotamer_score);
-												it -> second.bb_pos.push_back(new_x_position);
+										if (false) {
+											#pragma omp critical
+											{
+												std::map<std::tuple<int,int,std::string>, hotspot_stats>::iterator it;
+												//it = hstats.find(std::make_tuple(0,1,std::string("PHE")));
+												//std::cout << "try to find this: " << i_hotspot_group << " " << i_hspot_res << " " << params -> rot_index_p -> resname(irot) << std::endl;
+												it = hstats.find(std::make_tuple(i_hotspot_group, i_hspot_res, params -> rot_index_p -> resname(irot)));
+												if (it != hstats.end()) {
+													it -> second.scores.push_back(positioned_rotamer_score);
+													it -> second.bb_pos.push_back(new_x_position);
+												}
 											}
 										}
 
@@ -551,29 +578,31 @@ namespace rif {
 			} // end loop over hotspot group residue (with in one input pdb)
 
 		}// end loop over all hotspot input files
-
+		seed_pos.close();
 		std::cout << std::endl; // This ends the "progress bar"
 
 		if (opts.dump_hotspot_samples>=NSAMP){
 			hotspot_dump_file.close();
 		}
-		if (true) {
-			//std::ofstream hotspot_sc, rif_sc, seed_pos;
-			std::ofstream seed_pos;
-  			// hotspot_sc.open ("hotspot_score.sc");
-  			// rif_sc.open("rif_score.sc");
-  			seed_pos.open("seeding_list");
-  			auto rif_ptr = accumulator->rif();
-			for (std::map<std::tuple<int,int,std::string>, hotspot_stats>::iterator it = hstats.begin(); it!=hstats.end(); ++it) {
-				std::vector<std::string> bin_centers;
-				for (auto trans : it -> second.bb_pos) {
-					uint64_t const key = rif_ptr -> get_bin_key( trans );
-					EigenXform bin_cen = rif_ptr -> get_bin_center(key);
-					seed_pos << bin_cen.linear().row(0) << ' ' << bin_cen.linear().row(1) <<  ' ' << bin_cen.linear().row(2) << ' ' << bin_cen.translation()[0] << ' ' <<bin_cen.translation()[1] << ' ' << bin_cen.translation()[2] << std::endl;
-				}
-			}
-			seed_pos.close(); 
-		}
+		// no op
+		// if (false) {
+		// 	//std::ofstream hotspot_sc, rif_sc, seed_pos;
+		// 	std::ofstream seed_pos;
+		//  	hotspot_sc.open ("hotspot_score.sc");
+		//  	rif_sc.open("rif_score.sc");
+		//  	seed_pos.open("seeding_list");
+		//  	auto rif_ptr = accumulator->rif();
+		// 	for (std::map<std::tuple<int,int,std::string>, hotspot_stats>::iterator it = hstats.begin(); it!=hstats.end(); ++it) {
+		// 		std::vector<std::string> bin_centers;
+		// 		for (auto trans : it -> second.bb_pos) {
+		// 			uint64_t const key = rif_ptr -> get_bin_key( trans );
+		// 			EigenXform bin_cen = rif_ptr -> get_bin_center(key);
+		// 			seed_pos << bin_cen.linear().row(0) << ' ' << bin_cen.linear().row(1) <<  ' ' << bin_cen.linear().row(2) << ' ' << bin_cen.translation()[0] << ' ' <<bin_cen.translation()[1] << ' ' << bin_cen.translation()[2] << std::endl;
+		// 		}
+		// 	}
+		// 	seed_pos.close(); 
+		// }
+
 		//utility_exit_with_message("done");
 		// let the rif builder thing know you're done
 		accumulator->checkpoint( std::cout, force_hotspot );

@@ -266,6 +266,8 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
     OPT_1GRP_KEY(  String      , rif_dock, buried_list )
 
     OPT_1GRP_KEY(  IntegerVector, rif_dock, requirements )
+    OPT_1GRP_KEY(  IntegerVector, rif_dock, hotspot_requirement_num )
+    OPT_1GRP_KEY(  Real, rif_dock, hotspot_rms )
 
     OPT_1GRP_KEY( Real         , rif_dock, request_num_thread)
 
@@ -531,6 +533,9 @@ OPT_1GRP_KEY(     StringVector , rif_dock, scaffolds )
             NEW_OPT(  rif_dock::buried_list, "temp", "" );
 
             NEW_OPT(  rif_dock::requirements,        "which rif residue should be in the final output", utility::vector1< int >());
+            NEW_OPT(  rif_dock::hotspot_requirement_num,        "what are the hotspot added, only used for filtering outputs base on RMS", utility::vector1< int >());
+            NEW_OPT(  rif_dock::hotspot_rms, "rms to original hotspot cutoff" , 100 );
+            
             NEW_OPT(  rif_dock::request_num_thread, "this number of threads will be used for OpenMP" , 1 );
 
 
@@ -776,6 +781,8 @@ struct RifDockOpt
     std::string buried_list                          ;
     
     std::vector<int> requirements                    ;
+    std::vector<int> hotspot_requirement_num         ;
+    float hotspot_rms								 ;
 
     bool        need_to_calculate_sasa               ;
     float       sasa_cut                             ;
@@ -1016,6 +1023,7 @@ struct RifDockOpt
         score_per_1000_sasa_cut                 = option[rif_dock::score_per_1000_sasa_cut              ]();
 
         buried_list                             = option[rif_dock::buried_list                          ]();
+        hotspot_rms                             = option[rif_dock::hotspot_rms                          ]();
         request_num_thread                      = option[rif_dock::request_num_thread                   ]();
 
 
@@ -1114,6 +1122,7 @@ struct RifDockOpt
         patchdock_top_ranks                     = option[rif_dock::patchdock_top_ranks                 ]();
         
         for( int req : option[rif_dock::requirements]() ) requirements.push_back(req);
+        for( int num : option[rif_dock::hotspot_requirement_num]() ) hotspot_requirement_num.push_back(num);
 
         for( std::string s : option[rif_dock::dump_rifgen_near_pdb]() ) dump_rifgen_near_pdb.push_back(s);
 	}

@@ -263,8 +263,8 @@ dump_rif_result_(
     // TYU change to vector of strings instead of string
     std::map< int, std::vector<std::string> > pikaa;
     // tmp changes to mmatch to hotspot 
-    core::pose::PoseOP trp_in = core::import_pose::pose_from_file(static_cast<std::string>("/home/tayi/project/met/peptides/start/trp_aligned.pdb"));
-    core::pose::PoseOP tyr_in = core::import_pose::pose_from_file(static_cast<std::string>("/home/tayi/project/met/peptides/start/tyr1_aligned.pdb"));
+    //core::pose::PoseOP trp_in = core::import_pose::pose_from_file(static_cast<std::string>("/home/tayi/project/met/peptides/start/trp_aligned.pdb"));
+    //core::pose::PoseOP tyr_in = core::import_pose::pose_from_file(static_cast<std::string>("/home/tayi/project/met/peptides/start/tyr1_aligned.pdb"));
     std::map<int, std::tuple<int, float, core::pose::PoseOP>> hotres;
     int chain_no = pose_from_rif.num_chains();   
     int res_num = pose_from_rif.size() + 1;
@@ -279,9 +279,9 @@ dump_rif_result_(
             rdd.rif_ptrs[rif_resl]->get_rotamers_for_xform( bba.position(), rotscores );
             typedef std::pair<float,int> PairFI;
 
-            core::pose::PoseOP res1op, res2op;
-            hotres.insert(std::make_pair(1,std::make_tuple(0, 100.0, res1op)));
-            hotres.insert(std::make_pair(2,std::make_tuple(0, 100.0, res2op)));
+            // core::pose::PoseOP res1op, res2op;
+            // hotres.insert(std::make_pair(1,std::make_tuple(0, 100.0, res1op)));
+            // hotres.insert(std::make_pair(2,std::make_tuple(0, 100.0, res2op)));
 
             BOOST_FOREACH( PairFI const & p, rotscores ){
                 int const irot = p.second;
@@ -316,26 +316,47 @@ dump_rif_result_(
                         a.nonconst_data().chain = rdd.opt.rif_rots_as_chains ? chains.at( chain_no % 52 ) : 'A';
                         ::scheme::actor::write_pdb( allout, a, nullptr );
                     }
-                    if (sat1_sat2.first > -1) {
+                    //doing some filter base on rms of hotspot
+                    bool has_hotspot_num = false;
+                    for (auto num: rdd.opt.hotspot_requirement_num) {
+                        if (sat1_sat2.first == num) has_hotspot_num = true;
+                    } 
+                    if (sat1_sat2.first > -1 && has_hotspot_num) {
                         core::conformation::ResidueOP irot_tmp = rdd.rot_index_p -> get_rotamer_at_identity(irot);
                         apply_xform_to_residue(*irot_tmp,xalignout * bba.position());
                         core::pose::Pose irot_pos;
                         irot_pos.append_residue_by_jump(*irot_tmp,1);
-                        if (oneletter =="W") {
-                            float rms = core::scoring::all_scatom_rmsd_nosuper(irot_pos,*trp_in);
-                            if (rms < std::get<1>(hotres[1])) {
-                                std::get<2>(hotres[1]) = irot_pos.clone();
-                                std::get<0>(hotres[1]) = ires + 1;
-                            }
-                            //std::cout << "W: " << irot << " " << core::scoring::all_scatom_rmsd_nosuper(irot_pos,*trp_in) <<std::endl;
-                        } else if (oneletter =="Y") {
-                            float rms = core::scoring::all_scatom_rmsd_nosuper(irot_pos,*tyr_in);
-                            if (rms < std::get<1>(hotres[2])) {
-                                std::get<2>(hotres[2]) = irot_pos.clone();
-                                std::get<0>(hotres[2]) = ires + 1;
-                            }
-                            //std::cout << "Y: " << irot << " " << core::scoring::all_scatom_rmsd_nosuper(irot_pos,*tyr_in)<<std::endl;
+                        
+                        std::string rifdir = rdd.opt.rif_files[0];
+                        std::string delimiter = "/";
+                        std::string first = rifdir.substr(0, rifdir.find(delimiter));
+
+                        std::ostringstream filename;
+                        filename << first << "/" << "hotspot_" << sat1_sat2.first << ".pdb";
+                        core::pose::PoseOP hotin = core::import_pose::pose_from_file(filename.str());
+                        float rms = core::scoring::all_scatom_rmsd_nosuper(irot_pos,*hotin);
+                        //std::cout << "rms of hotspot:  " << sat1_sat2.first << "    " << rms << std::endl;
+                        if (rms < rdd.opt.hotspot_rms ) {
+                            hotres.insert(std::make_pair(sat1_sat2.first,std::make_tuple(ires + 1, rms, irot_pos.clone())));
+                        } else {
+                            return;
                         }
+                        // hotres.insert(std::make_pair(sat1_sat2.first,std::make_tuple(ires + 1, 100.0, irot_pos.clone())));
+                        // if (oneletter =="W") {
+                        //     float rms = core::scoring::all_scatom_rmsd_nosuper(irot_pos,*trp_in);
+                        //     if (rms < std::get<1>(hotres[1])) {
+                        //         std::get<2>(hotres[1]) = irot_pos.clone();
+                        //         std::get<0>(hotres[1]) = ires + 1;
+                        //     }
+                        //     //std::cout << "W: " << irot << " " << core::scoring::all_scatom_rmsd_nosuper(irot_pos,*trp_in) <<std::endl;
+                        // } else if (oneletter =="Y") {
+                        //     float rms = core::scoring::all_scatom_rmsd_nosuper(irot_pos,*tyr_in);
+                        //     if (rms < std::get<1>(hotres[2])) {
+                        //         std::get<2>(hotres[2]) = irot_pos.clone();
+                        //         std::get<0>(hotres[2]) = ires + 1;
+                        //     }
+                        //     //std::cout << "Y: " << irot << " " << core::scoring::all_scatom_rmsd_nosuper(irot_pos,*tyr_in)<<std::endl;
+                        // }
 
                     }
 
@@ -467,13 +488,15 @@ dump_rif_result_(
         needs_RIFRES.push_back(ires+1);
     }
     // replace with hotspot 
-    if (true) {
-        for (auto const & x : hotres) {
-            int res = std::get<0>(x.second);
-            core::pose::PoseOP poseop = std::get<2>(x.second);
-            pose_from_rif.replace_residue( res, poseop -> residue(1), true ); 
-        }
-    }
+    // if (true) {
+    //     for (auto const & x : hotres) {
+
+    //         int res = std::get<0>(x.second);
+    //         core::pose::PoseOP poseop = std::get<2>(x.second);
+    //         pose_from_rif.replace_residue( res, poseop -> residue(1), true );
+    //         std::cout << "replacing " << res << " with " <<  poseop -> residue(1).name3() << std::endl;
+    //     }
+    // }
 
     // Add PDBInfo labels if they are applicable
     bool using_rosetta_model = (selected_result.pose_ != nullptr) && !rdd.opt.override_rosetta_pose;
@@ -512,7 +535,15 @@ dump_rif_result_(
 
     rdd.scaffold_provider->modify_pose_for_output(si, pose_to_dump);
 
+    if (true) {
+        for (auto const & x : hotres) {
 
+            int res = std::get<0>(x.second);
+            core::pose::PoseOP poseop = std::get<2>(x.second);
+            pose_to_dump.replace_residue( res, poseop -> residue(1), true );
+            //std::cout << "replacing " << res << " with " <<  poseop -> residue(1).name3() << std::endl;
+        }
+    }
     // Dump the main output
     if (!rdd.opt.outputsilent) {
         utility::io::ozstream out1( pdboutfile );

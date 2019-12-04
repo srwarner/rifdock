@@ -128,6 +128,8 @@ OPT_1GRP_KEY( StringVector, rifgen, donres )
     OPT_1GRP_KEY( Boolean		, rifgen, single_file_hotspots_insertion)
     OPT_1GRP_KEY( Boolean		, rifgen, use_d_aa)
     OPT_1GRP_KEY( Boolean		, rifgen, use_l_aa)
+    OPT_1GRP_KEY( String		, rifgen, output_hotspot_seeding)
+    OPT_1GRP_KEY( Boolean		, rifgen, center_target)
 
 	// bounding grids stuff
 	OPT_1GRP_KEY( RealVector        , rifgen, hash_cart_resls        )
@@ -207,6 +209,8 @@ OPT_1GRP_KEY( StringVector, rifgen, donres )
         NEW_OPT(  rifgen::single_file_hotspots_insertion	, "" , false);
         NEW_OPT(  rifgen::use_d_aa							, "" , false);
         NEW_OPT(  rifgen::use_l_aa							, "" , true);
+        NEW_OPT(  rifgen::output_hotspot_seeding			, "Whether to output seeding position based on Hotspot" , "");
+        NEW_OPT(  rifgen::center_target			            , "" , true);
 
 
 
@@ -437,6 +441,8 @@ std::shared_ptr<::devel::scheme::RifBase> init_rif_and_generators(
 			hspot_opts.label_hotspots_254 = option[ rifgen::label_hotspots_254 ]();
             hspot_opts.all_hotspots_are_bidentate = option[ rifgen::all_hotspots_are_bidentate]();
             hspot_opts.use_d_aa = option[rifgen::use_d_aa]();
+            hspot_opts.output_hotspot_seeding = option[rifgen::output_hotspot_seeding]();
+            hspot_opts.outdir = option[rifgen::outdir]();
 			if (!option[ rifgen::dump_hotspot_samples].user()) hspot_opts.dump_hotspot_samples = 0;
 			hspot_opts.single_file_hotspots_insertion = option[rifgen::single_file_hotspots_insertion]();
 			for(int i = 0; i < 3; ++i) hspot_opts.target_center[i] = target_center[i];
@@ -525,27 +531,28 @@ int main(int argc, char *argv[]) {
 	core::import_pose::pose_from_file( *target, target_fname );
 	std::cout << "target nres: " << target->size() << std::endl;
 	std::string target_tag = utility::file::file_basename( utility::file_basename( target_fname ) );
-
 	Vec target_center(0,0,0);
 	utility::vector1<core::Size> target_res = get_res( target_reslist_file , *target, /*nocgp*/false );
-	{
-		std::cout << "target_res_file: '" << target_reslist_file << "'" << std::endl;
-		std::cout << "target_res: " << target_res << std::endl;
-		core::pose::Pose target0 = *target;
-		int count = 0;
-		BOOST_FOREACH( core::Size ir, target_res ){
-			for( int ia = 1; ia <= target0.residue(ir).nheavyatoms(); ++ia ){
-				// std::cout << ir << " " << ia << " " << target0.residue(ir).xyz(ia) << std::endl;
-				target_center += target0.residue(ir).xyz(ia);
-				++count;
+	if (option[rifgen::center_target]) {
+		{
+			std::cout << "target_res_file: '" << target_reslist_file << "'" << std::endl;
+			std::cout << "target_res: " << target_res << std::endl;
+			core::pose::Pose target0 = *target;
+			int count = 0;
+			BOOST_FOREACH( core::Size ir, target_res ){
+				for( int ia = 1; ia <= target0.residue(ir).nheavyatoms(); ++ia ){
+					// std::cout << ir << " " << ia << " " << target0.residue(ir).xyz(ia) << std::endl;
+					target_center += target0.residue(ir).xyz(ia);
+					++count;
+				}
 			}
-		}
-		target_center /= (double)count;
-		cout << "centering target from " << target_center << " to ( 0, 0, 0 )" << endl;
-		*target = target0;
-		for( int ir = 1; ir <= target0.size(); ++ir ){
-			for( int ia = 1; ia <= target0.residue_type(ir).natoms(); ++ia ){
-				target->set_xyz( core::id::AtomID(ia,ir), target0.residue(ir).xyz(ia) - target_center );
+			target_center /= (double)count;
+			cout << "centering target from " << target_center << " to ( 0, 0, 0 )" << endl;
+			*target = target0;
+			for( int ir = 1; ir <= target0.size(); ++ir ){
+				for( int ia = 1; ia <= target0.residue_type(ir).natoms(); ++ia ){
+					target->set_xyz( core::id::AtomID(ia,ir), target0.residue(ir).xyz(ia) - target_center );
+				}
 			}
 		}
 	}

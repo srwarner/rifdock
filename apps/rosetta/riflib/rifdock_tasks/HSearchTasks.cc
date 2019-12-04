@@ -161,19 +161,13 @@ HSearchScoreAtReslTask::return_search_points(
 
     //omp_set_dynamic(0); 
     //omp_set_num_threads(5);
-    //omp_max_thread_count_request(rdd.opt.request_num_thread); 
+    omp_max_thread_count_request(rdd.opt.request_num_thread); 
     #ifdef USE_OPENMP
     #pragma omp parallel for schedule(dynamic,64)
     #endif
 
     for( int64_t i = 0; i < search_points.size(); ++i ){
         if( exception ) continue;
-        if (i == 0) {
-            utility::io::ozstream threadout("threadout.txt",std::ios_base::app);
-            std::cout << "____________________________" << "use_num_threads: " << omp_get_num_threads() << "____________________________" << std::endl;
-            threadout << "____________________________" << "use_num_threads: " << omp_get_num_threads() << "____________________________\n";
-            threadout.close();
-        }
         try {
             if( i%out_interval==0 ){ cout << '*'; cout.flush(); }
             RifDockIndex const isamp = search_points[i].index;

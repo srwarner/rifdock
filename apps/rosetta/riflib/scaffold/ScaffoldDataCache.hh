@@ -310,7 +310,7 @@ struct ScaffoldDataCache {
             }
             
             if( ! scaffold_centered_p->residue(ir).is_protein()   ) continue;
-            if(   scaffold_centered_p->residue(ir).name3()=="GLY" ) continue;
+            //if(   scaffold_centered_p->residue(ir).name3()=="GLY" ) continue;
             if(   scaffold_centered_p->residue(ir).name3()=="PRO" ) continue;
             for( int jr = 0; jr < rot_index.size(); ++jr ) { 
                 (*scaffold_onebody_glob0_p)[ir-1][jr] = 0;

@@ -33,6 +33,8 @@ struct RifGeneratorUserHotspotsOpts {
     bool all_hotspots_are_bidentate = false;
     bool single_file_hotspots_insertion = false;
     bool use_d_aa = false;
+    std::string output_hotspot_seeding ="";
+    std::string outdir;
 	Eigen::Vector3f target_center;
 	std::vector<std::string> hotspot_files;
 };

@@ -136,11 +136,6 @@ int main(int argc, char *argv[]) {
 		using devel::scheme::print_header;
 		using ::devel::scheme::RotamerIndex;
 
-		std::cout << "Rifdock set number of threads: " << omp_max_thread_count_request(opt.request_num_thread) << std::endl;
-		utility::io::ozstream maxthreadout("threadout.txt",std::ios_base::app);
-		maxthreadout << "____________________________" << "set_num_threads: " << omp_thread_count() << "____________________________\n";
-		maxthreadout.close();
-
 
 	/////////////////////////////////////////////////////////////////////////////////
 	/////////////////////// static shit
@@ -852,10 +847,6 @@ int main(int argc, char *argv[]) {
 
 			runtime_assert( rot_index_p );
 			std::string scafftag = utility::file_basename( utility::file::file_basename( scaff_fname ) );
-			utility::io::ozstream maxthreadout("threadout.txt",std::ios_base::app);
-			std::cout << "____________________________" << "max_num_threads: " << omp_max_threads() << "____________________________" << std::endl;
-			maxthreadout << "____________________________" << "max_num_threads: " << omp_max_threads() << "____________________________\n";
-			maxthreadout.close();
 			std::cout << "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////" << std::endl;
 			std::cout << "/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////" << std::endl;
 			std::cout << "//////   begin scaffold " << scafftag << " " << iscaff << " of " << opt.scaffold_fnames.size() << std::endl;
@@ -878,6 +869,9 @@ int main(int argc, char *argv[]) {
 			assert(test_data_cache);
 			scaffold_sequence_glob0 = *(test_data_cache->scaffold_sequence_glob0_p);
 			scaffold_res = *(test_data_cache->scaffold_res_p);
+			for (auto i: scaffold_res) {
+				std::cout << "res use: " << i << std::endl;
+			}
 			float test_scaff_radius = test_data_cache->scaff_radius;
 			float test_scaff_redundancy_filter_rg = test_data_cache->scaff_redundancy_filter_rg;
 			Eigen::Vector3f test_scaffold_center = test_data_cache->scaffold_center;

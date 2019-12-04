@@ -108,7 +108,7 @@ get_info_for_iscaff(
         for(auto ir:scaffold_res) std::cout << " " << ir << scaffold.residue(ir).name3();
         std::cout << std::endl;
     } else {
-        get_default_scaffold_res( scaffold, scaffold_res );
+        get_default_scaffold_res( scaffold, scaffold_res);
     }
 
 
@@ -345,10 +345,12 @@ get_bbsasa_actors( core::pose::Pose const & pose ) {
 
 void
 get_default_scaffold_res( core::pose::Pose const & pose,
-    utility::vector1<core::Size> & scaffold_res ) {
-
+    utility::vector1<core::Size> & scaffold_res
+    ) {
     for( int ir = 1; ir <= pose.size(); ++ir){
         if( !pose.residue(ir).is_protein() ) continue;
+        if( pose.residue(ir).name3() == "CYS" ){ if(true) std::cout << "get_res skip CYS" << std::endl; continue; }
+        if( pose.residue(ir).name3() == "PRO" ){ if(true) std::cout << "get_res skip PRO" << std::endl; continue; }
         scaffold_res.push_back(ir);
     }
 }

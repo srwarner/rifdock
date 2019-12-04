@@ -344,6 +344,7 @@ rosetta_score_inner(
             for( int ipr = 0; ipr < packed_results[imin].numrots(); ++ipr ){
                 int ires = scaffres_l2g_p->at( packed_results[imin].rotamers().at(ipr).first );
                 int irot =                  packed_results[imin].rotamers().at(ipr).second;
+                
                 std::string ires_name = rot_index.resname(irot);
                 core::conformation::ResidueOP newrsd;
                 if (rot_index.d_l_map_.find(rot_index.resname(irot)) != rot_index.d_l_map_.end()) {
@@ -415,6 +416,7 @@ rosetta_score_inner(
                         }
                     }
                 }
+
                 if(ir_clash){
                     pose_to_min.replace_residue(ir, *alaop, true);
                     replaced_scaffold_res.push_back(ir);
