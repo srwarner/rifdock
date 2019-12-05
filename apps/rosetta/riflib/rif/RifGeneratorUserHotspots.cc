@@ -202,7 +202,6 @@ namespace rif {
 		if (opts.output_hotspot_seeding != "") {
   			seed_pos.open(opts.output_hotspot_seeding);
 		}
-
 		for( int i_hotspot_group = 0; i_hotspot_group < this->opts.hotspot_files.size(); ++i_hotspot_group ){
 
 
@@ -263,12 +262,12 @@ namespace rif {
 					}
 				}
 			}
-			for (int num_res = 1; num_res <= myresname.size(); num_res++) {
-				for (int res = 0; res < myresname[num_res].size(); res++) {
-					std::cout << "Adding: " << i_hotspot_group << " : " << num_res << " : " << myresname[num_res][res] << std::endl;
-					hstats.insert(std::pair<std::tuple<int, int, std::string>,hotspot_stats>(std::make_tuple(i_hotspot_group, num_res, myresname[num_res][res]),hotspot_stats(i_hotspot_group, num_res, myresname[num_res][res])));
-				}
-			}
+// 			for (int num_res = 1; num_res <= myresname.size(); num_res++) {
+// 				for (int res = 0; res < myresname[num_res].size(); res++) {
+// 					std::cout << "Adding: " << i_hotspot_group << " : " << num_res << " : " << myresname[num_res][res] << std::endl;
+// 					hstats.insert(std::pair<std::tuple<int, int, std::string>,hotspot_stats>(std::make_tuple(i_hotspot_group, num_res, myresname[num_res][res]),hotspot_stats(i_hotspot_group, num_res, myresname[num_res][res])));
+// 				}
+// 			}
       		std::cout << "Processing hotspots... " << std::flush; // No endl here!!!!
 
 			// read in pdb files # i_hotspot_group
@@ -497,6 +496,7 @@ namespace rif {
 
 										BBActor bbact( atom_N, atom_CA, atom_C);
 										EigenXform new_x_position = bbact.position();
+
 										if (false) {
 											#pragma omp critical
 											{
@@ -602,7 +602,6 @@ namespace rif {
 		// 	}
 		// 	seed_pos.close(); 
 		// }
-
 		//utility_exit_with_message("done");
 		// let the rif builder thing know you're done
 		accumulator->checkpoint( std::cout, force_hotspot );
