@@ -755,7 +755,7 @@ struct RotamerIndex {
 		using std::cerr;
 		using std::endl;
 
-		// cerr << "SANITY_CHECK" << endl;
+		//cerr << "SANITY_CHECK" << endl;
 		for( auto const & tmp : bounds_map_ ){
 			// cerr << tmp.first << " " << tmp.second.first << " " << tmp.second.second << endl;
 			ALWAYS_ASSERT_MSG( tmp.second.first <= tmp.second.second, "RotamerIndex::sanity_check FAIL" );
@@ -857,12 +857,15 @@ struct RotamerIndex {
 			}
 		}
 
-		ALWAYS_ASSERT( resname(ala_rot_) == "ALA" );
+		std::string valCheck("ALA");
+		ALWAYS_ASSERT( resname(ala_rot_) == valCheck );
 
 		for( int irot = 0; irot < size(); ++irot ){
 			if( irot < n_primary_rotamers_ ){ ALWAYS_ASSERT(  is_primary(irot) ) }
 			else                            { ALWAYS_ASSERT( !is_primary(irot) ) }
 		}
+		
+		return true;
 	}
 
 	float
